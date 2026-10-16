@@ -16,10 +16,22 @@ namespace MuProto
         {
             if (!cache.TryGetValue(name, out var prefab))
             {
-                prefab = Resources.Load<GameObject>("Models/" + name);
+                prefab = Resources.Load<GameObject>("Models/" + name) ?? FirstInFolder("Models/" + name);
                 cache[name] = prefab;
             }
             return prefab;
+        }
+
+        // Also accept a folder named after the slot (Models/Player/AnyPrefab), preferring an animated prefab.
+        static GameObject FirstInFolder(string path)
+        {
+            GameObject first = null;
+            foreach (var go in Resources.LoadAll<GameObject>(path))
+            {
+                if (go.GetComponentInChildren<Animator>() != null) return go;
+                if (first == null) first = go;
+            }
+            return first;
         }
 
         // Instantiates the model under parent, scaled to targetHeight with its feet at the parent's origin.
