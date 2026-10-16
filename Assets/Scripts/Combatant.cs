@@ -1,0 +1,62 @@
+using UnityEngine;
+
+namespace MuProto
+{
+    // Shared HP / damage logic for the player and monsters.
+    public abstract class Combatant : MonoBehaviour
+    {
+        public int Hp { get; protected set; }
+        public abstract int MaxHp { get; }
+        public abstract int Atk { get; }
+        public abstract int Def { get; }
+        public bool IsDead => Hp <= 0;
+
+        public static int RollDamage(int atk, float multiplier, out bool crit)
+        {
+            crit = Random.value < 0.1f;
+            float dmg = atk * multiplier * Random.Range(0.9f, 1.1f);
+            if (crit) dmg *= 1.5f;
+            return Mathf.RoundToInt(dmg);
+        }
+
+        public void TakeDamage(int raw, bool crit, Combatant source)
+        {
+            if (IsDead) return;
+            int dmg = Mathf.Max(1, raw - Def / 2);
+            Hp = Mathf.Max(0, Hp - dmg);
+            FloatingText.Spawn(transform.position + Vector3.up * 2f, crit ? dmg + "!" : dmg.ToString(), DamageColor(crit), crit ? 44 : 34);
+            OnDamaged(source);
+            if (Hp == 0) Die(source);
+        }
+
+        public float FlatDistance(Component other)
+        {
+            Vector3 d = other.transform.position - transform.position;
+            d.y = 0;
+            return d.magnitude;
+        }
+
+        protected void Step(Vector3 direction, float speed)
+        {
+            direction.y = 0;
+            if (direction.sqrMagnitude < 0.0001f) return;
+            direction.Normalize();
+            Vector3 p = transform.position + direction * speed * Time.deltaTime;
+            p.x = Mathf.Clamp(p.x, -48f, 48f);
+            p.z = Mathf.Clamp(p.z, -48f, 48f);
+            transform.position = p;
+            Face(direction);
+        }
+
+        protected void Face(Vector3 direction)
+        {
+            direction.y = 0;
+            if (direction.sqrMagnitude > 0.0001f)
+                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(direction), 15f * Time.deltaTime);
+        }
+
+        protected abstract Color DamageColor(bool crit);
+        protected virtual void OnDamaged(Combatant source) { }
+        protected abstract void Die(Combatant killer);
+    }
+}
