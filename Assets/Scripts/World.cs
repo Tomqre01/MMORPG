@@ -147,6 +147,14 @@ namespace MuProto
             {
                 var p = new Vector3(Random.Range(-47f, 47f), 0, Random.Range(-47f, 47f));
                 if (p.magnitude < 6f || InsideZone(p, zones)) continue;
+                if (ModelLibrary.Find("Tree") != null)
+                {
+                    var holder = new GameObject("Tree").transform;
+                    holder.position = p;
+                    holder.rotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
+                    ModelLibrary.Spawn("Tree", holder, Random.Range(3.5f, 5.5f), out _);
+                    continue;
+                }
                 var trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 Object.Destroy(trunk.GetComponent<Collider>());
                 trunk.transform.position = p + Vector3.up;
