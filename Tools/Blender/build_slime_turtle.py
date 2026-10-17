@@ -4,9 +4,10 @@ Model, rig and animate a Slime and a Turtle in Blender, then export FBX for Unit
 Blender 4.2+ (tested on 5.2). Run inside Blender's Python console or with:
     blender -b -P build_slime_turtle.py -- "C:/path/to/YourUnityProject/Assets/Resources/Models"
 
-Writes  Models/Slime/Slime_Rigged.fbx  (monster, Lv1 zone)
-        Models/Pet/Pet_Rigged.fbx      (turtle used as the player's pet)
-plus a preview PNG of each next to the FBX.
+Writes  Models/Slime/Slime_Rigged.fbx    (monster, Lv1 zone)
+        Models/Turtle/Turtle_Rigged.fbx  (turtle, replaces the free TurtleShell)
+        Models/Pet/Pet_Rigged.fbx        (the same turtle, used as the player's pet)
+plus preview PNGs in Assets/Tools/Previews.
 Each FBX has actions Idle, Walk, Attack, Hit, Die.
 """
 import bpy, bmesh, sys, os, math
@@ -156,19 +157,27 @@ def make_action(arm, name, length, keys, loop):
     act.frame_range = (0, length)
     return act
 
+FBX_ARGS = dict(
+    use_selection=False, object_types={"ARMATURE", "MESH"},
+    apply_scale_options="FBX_SCALE_ALL", axis_forward="-Z", axis_up="Y",
+    add_leaf_bones=False, use_armature_deform_only=True, primary_bone_axis="Y", secondary_bone_axis="X",
+    bake_anim=True, bake_anim_use_all_actions=True, bake_anim_use_nla_strips=False,
+    bake_anim_force_startend_keying=True, bake_anim_simplify_factor=0.0,
+    path_mode="AUTO", mesh_smooth_type="FACE")
+
+def preview_dir(models_dir):
+    """Previews go to Assets/Tools/Previews so they are not packed into the game build."""
+    d = os.path.normpath(os.path.join(models_dir, "..", "..", "Tools", "Previews"))
+    os.makedirs(d, exist_ok=True)
+    return d
+
 def export(arm, obj, path, actions):
     for name, (length, loop, keys) in actions.items():
         make_action(arm, name, length, keys, loop)
     arm.animation_data.action = bpy.data.actions["Idle"]
     bpy.context.scene.frame_set(0)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    bpy.ops.export_scene.fbx(
-        filepath=path, use_selection=False, object_types={"ARMATURE", "MESH"},
-        apply_scale_options="FBX_SCALE_ALL", axis_forward="-Z", axis_up="Y",
-        add_leaf_bones=False, use_armature_deform_only=True, primary_bone_axis="Y", secondary_bone_axis="X",
-        bake_anim=True, bake_anim_use_all_actions=True, bake_anim_use_nla_strips=False,
-        bake_anim_force_startend_keying=True, bake_anim_simplify_factor=0.0,
-        path_mode="AUTO", mesh_smooth_type="FACE")
+    bpy.ops.export_scene.fbx(filepath=path, **FBX_ARGS)
     print("[ok]", path)
 
 def preview(path, target, dist, height, frame_action=None, frame=0):
@@ -260,9 +269,8 @@ def build_slime(out_dir):
                             14: {"Root": {"s": sq(0.4)}},
                             30: {"Root": {"s": (1.8, 0.14, 1.8)}}, 36: {"Root": {"s": (1.8, 0.14, 1.8)}}}),
     }
-    path = os.path.join(out_dir, "Slime", "Slime_Rigged.fbx")
-    export(arm, obj, path, actions)
-    preview(os.path.join(out_dir, "Slime", "Slime_Preview.png"), (0, 0, 0.38), 1.55, 0.55)
+    export(arm, obj, os.path.join(out_dir, "Slime", "Slime_Rigged.fbx"), actions)
+    preview(os.path.join(preview_dir(out_dir), "Slime_Preview.png"), (0, 0, 0.38), 1.55, 0.55)
 
 # ---------------------------------------------------------------- TURTLE (pet)
 def build_turtle(out_dir):
@@ -338,9 +346,9 @@ def build_turtle(out_dir):
                             36: {"Root": {"r": q(Y, 180), "t": (0, 0, 0.56)}, "Head": {"r": q(X, -40)},
                                  "Leg.FL": {"r": q(X, -20)}, "Leg.BR": {"r": q(X, 20)}}}),
     }
-    path = os.path.join(out_dir, "Pet", "Pet_Rigged.fbx")
-    export(arm, obj, path, actions)
-    preview(os.path.join(out_dir, "Pet", "Pet_Preview.png"), (0, -0.05, 0.22), 1.35, 0.6)
+    export(arm, obj, os.path.join(out_dir, "Turtle", "Turtle_Rigged.fbx"), actions)
+    bpy.ops.export_scene.fbx(**FBX_ARGS, filepath=os.path.join(out_dir, "Pet", "Pet_Rigged.fbx"))  # same turtle as the pet
+    preview(os.path.join(preview_dir(out_dir), "Turtle_Preview.png"), (0, -0.05, 0.22), 1.35, 0.6)
 
 # ---------------------------------------------------------------- main
 def main():

@@ -11,6 +11,7 @@
 | `Orc` | มอนโซน Lv10 |
 | `Golem` | มอนโซน Lv20 |
 | `Pet` | สัตว์เลี้ยงของผู้เล่น (เต่า `Pet_Rigged.fbx`) |
+| `Turtle` | เต่า `Turtle_Rigged.fbx` แทน TurtleShell ฟรี (ยังไม่มีโค้ดเรียกใช้ช่องนี้) |
 | `Tree` | ต้นไม้ในแผนที่ |
 
 โค้ดจะปรับขนาดโมเดลให้พอดีเอง และหาท่าทางจากชื่อคลิป (idle, run/walk, attack, hit, die) ให้เอง
@@ -81,7 +82,7 @@
 |---|---|
 
 1. เปิด Blender ไปที่แท็บ **Scripting** แล้วแก้บรรทัด `MODELS_DIR = r""` ให้ชี้ไปที่ `Assets\Resources\Models` ของโปรเจกต์
-2. กด **Run Script** จะได้ `Slime/Slime_Rigged.fbx` และ `Pet/Pet_Rigged.fbx`
+2. กด **Run Script** จะได้ `Slime/Slime_Rigged.fbx`, `Turtle/Turtle_Rigged.fbx` และ `Pet/Pet_Rigged.fbx` (เต่าตัวเดียวกัน) ภาพ preview อยู่ที่ `Assets/Tools/Previews`
 3. กลับไป Unity แล้วกด Play
 
 ไฟล์ชื่อ `<ชื่อ>_Rigged` ในโฟลเดอร์จะถูกเลือกก่อนเสมอ ถึงจะมี prefab จากแพ็กฟรีอยู่ในโฟลเดอร์เดียวกันก็ตาม
