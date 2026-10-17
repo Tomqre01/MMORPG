@@ -28,7 +28,7 @@ namespace MuProto
                 Destroy(zone.GetComponent<Collider>());
                 zone.transform.position = new Vector3(center.x, 0.01f, center.z);
                 zone.transform.localScale = new Vector3(radius * 2.4f, 0.01f, radius * 2.4f);
-                zone.GetComponent<Renderer>().material.color = Color.Lerp(color, new Color(0.2f, 0.25f, 0.15f), 0.7f);
+                Paint.Color(zone, Color.Lerp(color, new Color(0.2f, 0.25f, 0.15f), 0.7f));
             }
             else
             {
@@ -101,7 +101,7 @@ namespace MuProto
             Destroy(go.GetComponent<Collider>());
             go.transform.position = new Vector3(position.x, 0.05f, position.z);
             go.transform.localScale = new Vector3(0.1f, 0.02f, 0.1f);
-            go.GetComponent<Renderer>().material.color = color;
+            Paint.Color(go, color);
             go.AddComponent<Effect>().size = radius * 2f;
         }
 
@@ -125,7 +125,7 @@ namespace MuProto
             var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
             ground.transform.localScale = new Vector3(10, 1, 10);
-            ground.GetComponent<Renderer>().material.color = new Color(0.32f, 0.5f, 0.27f);
+            Paint.Color(ground, new Color(0.32f, 0.5f, 0.27f));
 
             if (Object.FindAnyObjectByType<Light>() == null)
             {
@@ -178,12 +178,12 @@ namespace MuProto
                 Object.Destroy(trunk.GetComponent<Collider>());
                 trunk.transform.position = p + Vector3.up;
                 trunk.transform.localScale = new Vector3(0.4f, 1f, 0.4f);
-                trunk.GetComponent<Renderer>().material.color = new Color(0.4f, 0.28f, 0.15f);
+                Paint.Color(trunk, new Color(0.4f, 0.28f, 0.15f));
                 var top = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 Object.Destroy(top.GetComponent<Collider>());
                 top.transform.position = p + Vector3.up * 2.6f;
                 top.transform.localScale = Vector3.one * Random.Range(1.6f, 2.4f);
-                top.GetComponent<Renderer>().material.color = new Color(0.18f, 0.42f, 0.2f);
+                Paint.Color(top, new Color(0.18f, 0.42f, 0.2f));
             }
             Random.state = state;
         }

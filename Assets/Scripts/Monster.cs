@@ -44,7 +44,7 @@ namespace MuProto
                 body.transform.SetParent(root.transform, false);
                 body.transform.localPosition = new Vector3(0, s * 0.5f, 0);
                 body.transform.localScale = Vector3.one * s;
-                body.GetComponent<Renderer>().material.color = spawner.Color;
+                Paint.Color(body, spawner.Color);
             }
 
             var m = root.AddComponent<Monster>();
@@ -86,7 +86,7 @@ namespace MuProto
             go.transform.SetParent(hpBar, false);
             go.transform.localPosition = localPos;
             go.transform.localScale = scale;
-            go.GetComponent<Renderer>().material.color = c;
+            Paint.Color(go, c);
             return go;
         }
 

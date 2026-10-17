@@ -93,7 +93,7 @@ namespace MuProto
             go.transform.SetParent(body, false);
             go.transform.localPosition = pos;
             go.transform.localScale = scale;
-            go.GetComponent<Renderer>().material.color = color;
+            Paint.Color(go, color);
         }
 
         // Two blades behind the back that grow and change colour every 10 levels.
@@ -116,7 +116,7 @@ namespace MuProto
                 w.transform.localPosition = new Vector3(side * 0.55f * size, 0.2f, -0.1f);
                 w.transform.localRotation = Quaternion.Euler(0, side * 25f, side * -30f);
                 w.transform.localScale = new Vector3(1.1f * size, 0.6f * size, 0.04f);
-                w.GetComponent<Renderer>().material.color = color;
+                Paint.Color(w, color);
             }
         }
 
