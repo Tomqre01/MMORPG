@@ -22,7 +22,7 @@ namespace MuProto
             go.name = "Projectile";
             go.transform.position = from;
             go.transform.localScale = Vector3.one * 0.35f;
-            go.GetComponent<Renderer>().material.color = color;
+            Paint.Color(go, color);
             var p = go.AddComponent<Projectile>();
             p.target = target;
             p.source = source;
@@ -108,13 +108,13 @@ namespace MuProto
             Destroy(ball.GetComponent<Collider>());
             ball.transform.SetParent(visual, false);
             ball.transform.localScale = Vector3.one * 0.6f;
-            ball.GetComponent<Renderer>().material.color = new Color(1f, 0.85f, 0.3f);
+            Paint.Color(ball, new Color(1f, 0.85f, 0.3f));
             var beak = GameObject.CreatePrimitive(PrimitiveType.Cube);
             Destroy(beak.GetComponent<Collider>());
             beak.transform.SetParent(visual, false);
             beak.transform.localPosition = new Vector3(0, 0, 0.32f);
             beak.transform.localScale = new Vector3(0.15f, 0.1f, 0.2f);
-            beak.GetComponent<Renderer>().material.color = new Color(1f, 0.5f, 0.1f);
+            Paint.Color(beak, new Color(1f, 0.5f, 0.1f));
         }
 
         void Update()
@@ -204,7 +204,7 @@ namespace MuProto
             arena.name = "Dungeon Arena";
             arena.transform.position = Center;
             arena.transform.localScale = new Vector3(3.2f, 1, 3.2f);
-            arena.GetComponent<Renderer>().material.color = new Color(0.28f, 0.24f, 0.3f);
+            Paint.Color(arena, new Color(0.28f, 0.24f, 0.3f));
             for (int x = -1; x <= 1; x += 2)
                 for (int z = -1; z <= 1; z += 2)
                 {
@@ -213,7 +213,7 @@ namespace MuProto
                     pillar.transform.SetParent(arena.transform, true);
                     pillar.transform.position = Center + new Vector3(x * 15f, 2f, z * 15f);
                     pillar.transform.localScale = new Vector3(1.5f, 4f, 1.5f) / 3.2f;
-                    pillar.GetComponent<Renderer>().material.color = new Color(0.45f, 0.4f, 0.5f);
+                    Paint.Color(pillar, new Color(0.45f, 0.4f, 0.5f));
                 }
         }
 
