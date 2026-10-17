@@ -22,16 +22,18 @@ namespace MuProto
             return prefab;
         }
 
-        // Also accept a folder named after the slot (Models/Player/AnyPrefab), preferring an animated prefab.
+        // Also accept a folder named after the slot (Models/Player/AnyPrefab), preferring an animated prefab,
+        // then a rigged mesh (e.g. an FBX exported from Blender), then anything.
         static GameObject FirstInFolder(string path)
         {
-            GameObject first = null;
+            GameObject first = null, rigged = null;
             foreach (var go in Resources.LoadAll<GameObject>(path))
             {
                 if (go.GetComponentInChildren<Animator>() != null) return go;
+                if (rigged == null && go.GetComponentInChildren<SkinnedMeshRenderer>() != null) rigged = go;
                 if (first == null) first = go;
             }
-            return first;
+            return rigged ?? first;
         }
 
         // Instantiates the model under parent, scaled to targetHeight with its feet at the parent's origin.
@@ -147,6 +149,9 @@ namespace MuProto
         public static ModelAnimator Attach(GameObject model, bool allowProcedural = true, string slot = null)
         {
             var animator = model.GetComponentInChildren<Animator>();
+            // A rigged FBX imported without an Animator still has clips next to it: give it one.
+            if (animator == null && slot != null && model.GetComponentInChildren<SkinnedMeshRenderer>() != null)
+                animator = model.AddComponent<Animator>();
             var all = animator != null && animator.runtimeAnimatorController != null
                 ? animator.runtimeAnimatorController.animationClips : null;
             if ((all == null || all.Length == 0) && animator != null && slot != null)
