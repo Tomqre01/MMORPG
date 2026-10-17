@@ -34,6 +34,18 @@
 ## ลงมือถือ Android (เมื่ออยากลองบนเครื่องจริง)
 File → Build Profiles → เลือก Android → Switch Platform → ตั้ง Orientation เป็น Landscape ใน Player Settings → ต่อมือถือที่เปิด USB debugging → Build And Run
 
+### ลงเครื่องจำลอง MuMu Player (ทดสอบแล้ว)
+1. เปิด MuMu Player ให้ขึ้นหน้าจอหลักก่อน
+2. เปิดโปรเจกต์ใน Unity โปรเจกต์จะต่อ adb เข้า MuMu ให้เอง (127.0.0.1:16384) จะเห็นข้อความ `[MuMu] Emulator connected` ที่แถบล่าง
+   ถ้าเปิด MuMu ทีหลัง ให้กด **Tools → Android → Connect MuMu Emulator**
+3. ใน Build Profiles กด **Refresh** ข้าง Run Device แล้วเลือกเครื่อง (MuMu แสดงเป็นชื่อมือถือ เช่น Samsung SM G9980)
+4. กด **Build And Run** รอบแรกใช้เวลาหลายนาที (คอมไพล์ IL2CPP) รอบต่อไปเร็วขึ้นมาก
+
+ถ้าขึ้น "No Android devices connected" ให้กด OK แล้วทำข้อ 2 ใหม่
+
+> ทรงพื้นฐานที่สร้างตอนเกมรัน (พื้น โซน ต้นไม้ ปีก หลอดเลือด) ต้องลงสีผ่าน `Paint.Color()` เสมอ
+> ถ้าใช้ `material.color` ตรงๆ จะเห็นใน Editor แต่หายไปในไฟล์ build บนมือถือ
+
 ## ไฟล์โค้ด
 | ไฟล์ | หน้าที่ |
 |---|---|
@@ -44,6 +56,7 @@ File → Build Profiles → เลือก Android → Switch Platform → ต�
 | `World.cs` | สร้างแผนที่ โซนมอน กล้อง เอฟเฟกต์ และจุดเริ่มเกม |
 | `HUD.cs` | UI ทั้งหมด จอยสติ๊ก ตัวเลขดาเมจ หน้าต่างกระเป๋า |
 | `UIBuilder.cs` | ตัวช่วยสร้าง UI จากโค้ด |
+| `Paint.cs` | ลงสีทรงที่สร้างตอนเกมรัน ด้วยวัสดุ URP ที่ติดไปกับ build เสมอ |
 | `Models.cs` | โหลดโมเดล 3D จาก Resources/Models และเล่นท่าทาง (หรือขยับให้เองถ้าโมเดลไม่มีท่า) |
 | `Systems.cs` | กระสุน/เวทระยะไกล สัตว์เลี้ยง และดันเจี้ยน |
 
