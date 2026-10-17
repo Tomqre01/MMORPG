@@ -11,7 +11,7 @@
 | `Orc` | มอนโซน Lv10 |
 | `Golem` | มอนโซน Lv20 |
 | `Pet` | สัตว์เลี้ยงของผู้เล่น (เต่า `Pet_Rigged.fbx`) |
-| `Turtle` | มอนโซน Lv3 (เต่า `Turtle_Rigged.fbx`) |
+| `Turtle` | มอนโซน Lv3 (TurtleShell หนามแหลม `Turtle_Rigged.fbx`) |
 | `Tree` | ต้นไม้ในแผนที่ |
 
 โค้ดจะปรับขนาดโมเดลให้พอดีเอง และหาท่าทางจากชื่อคลิป (idle, run/walk, attack, hit, die) ให้เอง
@@ -86,3 +86,13 @@
 3. กลับไป Unity แล้วกด Play
 
 ไฟล์ชื่อ `<ชื่อ>_Rigged` ในโฟลเดอร์จะถูกเลือกก่อนเสมอ ถึงจะมี prefab จากแพ็กฟรีอยู่ในโฟลเดอร์เดียวกันก็ตาม
+
+## TurtleShell (มอนโซน Lv3)
+สคริปต์ `Tools/Blender/build_turtleshell.py` ปั้นกระดองหนามที่เปิดปิดได้แบบหอย มีตัวโผล่หน้าออกมาตรงกลาง
+ท่าทางชื่อและความยาวตรงกับแพ็ก RPG Monster Duo (30 fps) ครบ 18 ท่า:
+IdleNormal, IdleBattle, Walk, WalkBack, WalkLeft, WalkRight, Run, Attack01, Attack02, Defend, DefendHit,
+GetHit, Dizzy, Die, Taunt, Victory, SenseSomethingStart, SenseSomethingRT
+
+![TurtleShell: ยืน, ตี, ตาย](images/turtleshell.png)
+
+รันแบบเดียวกับสคริปต์อื่น ได้ไฟล์ `Turtle/Turtle_Rigged.fbx` (เต่าน่ารักใน `Pet` ยังมาจาก `build_slime_turtle.py`)

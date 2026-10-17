@@ -5,8 +5,8 @@ Blender 4.2+ (tested on 5.2). Run inside Blender's Python console or with:
     blender -b -P build_slime_turtle.py -- "C:/path/to/YourUnityProject/Assets/Resources/Models"
 
 Writes  Models/Slime/Slime_Rigged.fbx    (monster, Lv1 zone)
-        Models/Turtle/Turtle_Rigged.fbx  (turtle, replaces the free TurtleShell)
-        Models/Pet/Pet_Rigged.fbx        (the same turtle, used as the player's pet)
+        Models/Pet/Pet_Rigged.fbx        (cute turtle used as the player's pet)
+(the Turtle monster is built by build_turtleshell.py)
 plus preview PNGs in Assets/Tools/Previews.
 Each FBX has actions Idle, Walk, Attack, Hit, Die.
 """
@@ -346,8 +346,7 @@ def build_turtle(out_dir):
                             36: {"Root": {"r": q(Y, 180), "t": (0, 0, 0.56)}, "Head": {"r": q(X, -40)},
                                  "Leg.FL": {"r": q(X, -20)}, "Leg.BR": {"r": q(X, 20)}}}),
     }
-    export(arm, obj, os.path.join(out_dir, "Turtle", "Turtle_Rigged.fbx"), actions)
-    bpy.ops.export_scene.fbx(**FBX_ARGS, filepath=os.path.join(out_dir, "Pet", "Pet_Rigged.fbx"))  # same turtle as the pet
+    export(arm, obj, os.path.join(out_dir, "Pet", "Pet_Rigged.fbx"), actions)  # the Turtle monster comes from build_turtleshell.py
     preview(os.path.join(preview_dir(out_dir), "Turtle_Preview.png"), (0, -0.05, 0.22), 1.35, 0.6)
 
 # ---------------------------------------------------------------- main
