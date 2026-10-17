@@ -99,10 +99,17 @@ namespace MuProto
             visual = null;
             if (builtLevel <= 0) return;
 
-            visual = new GameObject("Visual").transform;
-            visual.SetParent(transform, false);
+            visual = MakeVisual(transform, out anim, out isModel);
+        }
+
+        // The pet's look: the Pet model, or a little yellow ball with a beak when it is missing.
+        // Also used for other players' pets seen online (RemotePet).
+        public static Transform MakeVisual(Transform parent, out ModelAnimator anim, out bool isModel)
+        {
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(parent, false);
             isModel = ModelLibrary.Spawn("Pet", visual, 0.9f, out anim) != null;
-            if (isModel) return;
+            if (isModel) return visual;
 
             var ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             Destroy(ball.GetComponent<Collider>());
@@ -115,6 +122,7 @@ namespace MuProto
             beak.transform.localPosition = new Vector3(0, 0, 0.32f);
             beak.transform.localScale = new Vector3(0.15f, 0.1f, 0.2f);
             Paint.Color(beak, new Color(1f, 0.5f, 0.1f));
+            return visual;
         }
 
         void Update()
