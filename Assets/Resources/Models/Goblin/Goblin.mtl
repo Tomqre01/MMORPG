@@ -1,0 +1,8 @@
+newmtl Goblin_Mat
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.05 0.05 0.05
+Ns 10
+d 1
+illum 2
+map_Kd Goblin_Palette.png

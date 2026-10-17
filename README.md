@@ -39,7 +39,7 @@ File → Build Profiles → เลือก Android → Switch Platform → ต�
 | `World.cs` | สร้างแผนที่ โซนมอน กล้อง เอฟเฟกต์ และจุดเริ่มเกม |
 | `HUD.cs` | UI ทั้งหมด จอยสติ๊ก ตัวเลขดาเมจ หน้าต่างกระเป๋า |
 | `UIBuilder.cs` | ตัวช่วยสร้าง UI จากโค้ด |
-| `Models.cs` | โหลดโมเดล 3D จาก Resources/Models และเล่นท่าทาง |
+| `Models.cs` | โหลดโมเดล 3D จาก Resources/Models และเล่นท่าทาง (หรือขยับให้เองถ้าโมเดลไม่มีท่า) |
 
 ## ปรับสมดุลเกมได้ที่ไหน
 - ค่ามอน: `Monster.Create` ใน `Monster.cs` (เลือด ตี ป้องกัน) และ `ExpReward` / `GoldReward`

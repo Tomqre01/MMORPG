@@ -152,7 +152,7 @@ namespace MuProto
                     var holder = new GameObject("Tree").transform;
                     holder.position = p;
                     holder.rotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
-                    ModelLibrary.Spawn("Tree", holder, Random.Range(3.5f, 5.5f), out _);
+                    ModelLibrary.Spawn("Tree", holder, Random.Range(3.5f, 5.5f), out _, procedural: false);
                     continue;
                 }
                 var trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
