@@ -188,13 +188,18 @@ def build(out_dir):
     clear_scene()
     scn = bpy.context.scene
     scn.render.fps = FPS
-    bones = ["Root", "Body", "Shell", "Head"]
+    bones = ["Root", "Body", "Shell", "Head", "Leg.FL", "Leg.FR", "Leg.BL", "Leg.BR", "Tail"]
     HINGE = (0, 0.6, 0.44)  # the lid hinges at the back like a clam
     joints = {"Root": ((0, 0, 0), (0, 0, 0.12)),
               "Body": ((0, 0, 0.0), (0, 0, 0.3)),
               "Shell": (HINGE, (0, 0.6, 0.9)),
-              "Head": ((0, -0.25, 0.28), (0, -0.65, 0.32))}
-    parents = {"Root": None, "Body": "Root", "Shell": "Body", "Head": "Body"}
+              "Head": ((0, -0.4, 0.28), (0, -0.85, 0.32)),
+              "Tail": ((0, 0.62, 0.18), (0, 0.95, 0.12))}
+    for side, sx in (("L", 1), ("R", -1)):
+        joints["Leg.F" + side] = ((sx * 0.42, -0.3, 0.16), (sx * 0.6, -0.44, 0.02))
+        joints["Leg.B" + side] = ((sx * 0.42, 0.32, 0.16), (sx * 0.6, 0.44, 0.02))
+    parents = {"Root": None, "Body": "Root", "Shell": "Body", "Head": "Body", "Tail": "Body",
+               "Leg.FL": "Body", "Leg.FR": "Body", "Leg.BL": "Body", "Leg.BR": "Body"}
     mats = [make_mat("TS_Shell", srgb(38, 104, 118), rough=0.4),
             make_mat("TS_Plate", srgb(62, 150, 152), rough=0.35),
             make_mat("TS_Lip", srgb(150, 86, 46), rough=0.5),
@@ -204,9 +209,10 @@ def build(out_dir):
             make_mat("TS_Skin", srgb(128, 170, 84), rough=0.55),
             make_mat("TS_EyeWhite", srgb(250, 246, 230), rough=0.2),
             make_mat("TS_Pupil", srgb(20, 16, 14), rough=0.1),
-            make_mat("TS_Beak", srgb(240, 150, 40), rough=0.45),
-            make_mat("TS_Glint", srgb(255, 255, 255), rough=0.2, emit=srgb(255, 255, 255))]
-    SHELL, PLATE, LIP, BASE, HORN, TIP, SKIN, WHITE, PUPIL, BEAK, GLINT = range(len(mats))
+            make_mat("TS_Mouth", srgb(46, 60, 30), rough=0.5),
+            make_mat("TS_Glint", srgb(255, 255, 255), rough=0.2, emit=srgb(255, 255, 255)),
+            make_mat("TS_SkinDark", srgb(88, 122, 56), rough=0.55)]
+    SHELL, PLATE, LIP, BASE, HORN, TIP, SKIN, WHITE, PUPIL, MOUTH, GLINT, SKIN2 = range(len(mats))
     B = Builder(bones)
 
     # base: a shallow bowl the creature sits in
@@ -246,14 +252,30 @@ def build(out_dir):
         B.cone(p, mid, 0.075, 0.03, HORN, "Shell", seg=8)
         B.cone(mid, tip, 0.032, 0.0, TIP, "Shell", seg=8)
     # the creature peeking out at the front
-    B.sphere((0, -0.55, 0.28), (0.22, 0.22, 0.19), SKIN, "Head", u=16, v=10, smooth=True)
+    # turtle head on a neck, poking out under the lid
+    B.sphere((0, -0.55, 0.27), (0.12, 0.2, 0.1), SKIN, "Head", u=12, v=8, smooth=True)          # neck
+    B.sphere((0, -0.76, 0.3), (0.16, 0.2, 0.13), SKIN, "Head", u=16, v=10, smooth=True)         # head
     for sx in (-1, 1):
-        B.sphere((sx * 0.09, -0.745, 0.315), (0.065, 0.03, 0.06), WHITE, "Head", u=12, v=8, smooth=True)
-        B.sphere((sx * 0.085, -0.77, 0.307), (0.032, 0.014, 0.036), PUPIL, "Head", u=10, v=6, smooth=True)
-        B.sphere((sx * 0.076, -0.778, 0.322), (0.011, 0.006, 0.011), GLINT, "Head", u=6, v=4, smooth=True)
-        B.sphere((sx * 0.1, -0.738, 0.378), (0.075, 0.022, 0.018), SHELL, "Head", u=8, v=4,
-                 rot=q(Y, -sx * 18))                                                           # angry brow
-    B.cone((0, -0.72, 0.24), (0, -0.86, 0.22), 0.055, 0.0, BEAK, "Head", seg=8)
+        B.sphere((sx * 0.095, -0.875, 0.37), (0.048, 0.028, 0.048), WHITE, "Head", u=12, v=8, smooth=True,
+                 rot=q(Z, -sx * 20))                                                            # eyes
+        B.sphere((sx * 0.09, -0.898, 0.365), (0.024, 0.012, 0.028), PUPIL, "Head", u=10, v=6, smooth=True)
+        B.sphere((sx * 0.082, -0.905, 0.378), (0.009, 0.005, 0.009), GLINT, "Head", u=6, v=4, smooth=True)
+        B.sphere((sx * 0.1, -0.868, 0.415), (0.06, 0.018, 0.014), SKIN2, "Head", u=8, v=4,
+                 rot=q(Y, -sx * 15))                                                            # angry brow
+        B.sphere((sx * 0.03, -0.95, 0.33), (0.012, 0.008, 0.01), PUPIL, "Head", u=6, v=4)        # nostrils
+    B.sphere((0, -0.948, 0.275), (0.075, 0.012, 0.01), MOUTH, "Head", u=10, v=4, smooth=True)    # mouth line
+    for x, y, r in ((0.06, -0.7, 0.04), (-0.07, -0.66, 0.035), (0.0, -0.78, 0.03)):
+        B.sphere((x, y, 0.415), (r, r, 0.012), SKIN2, "Head", u=8, v=4)                          # head spots
+    # stubby legs with little claws, and a tail
+    for name, (h, t) in joints.items():
+        if name.startswith("Leg"):
+            h, t = Vector(h), Vector(t)
+            B.sphere((h + t) / 2, (0.13, 0.15, 0.09), SKIN, name, u=10, v=6, smooth=True,
+                     rot=Vector((0, 1, 0)).rotation_difference((t - h).normalized()))
+            for k in (-1, 0, 1):
+                c = t + Vector((k * 0.045, -0.06 if t.y < 0 else 0.06, 0.0))
+                B.sphere(c, (0.022, 0.022, 0.018), HORN, name, u=6, v=4)
+    B.cone((0, 0.66, 0.18), (0, 0.95, 0.1), 0.07, 0.0, SKIN, "Tail", seg=8, smooth=True)
     obj = B.to_object("TurtleShell", mats)
     arm = build_armature("TurtleShell", joints, parents)
     obj.parent = arm
@@ -270,14 +292,19 @@ def build(out_dir):
         if s:
             e["s"] = s
         return e
-    closed = {"Shell": lid(2), "Head": head(-0.22, -0.04), "Root": root(s=(1.04, 0.94, 1.04))}
+    tuck = {n: {"t": ((-0.12 if n.endswith("L") else 0.12), (0.08 if ".F" in n else -0.08), 0.04)}
+            for n in ("Leg.FL", "Leg.FR", "Leg.BL", "Leg.BR")}
+    closed = dict(tuck, Shell=lid(2), Head=head(-0.3, -0.04), Root=root(s=(1.04, 0.94, 1.04)))
 
     def walk_cycle(n, back=0.0, side=0.0, roll_amp=7, lift=0.05, lean=6):
         k = {}
         for i, f in enumerate((0, n // 4, n // 2, 3 * n // 4)):
             s = (1, 0, -1, 0)[i]
             k[f] = {"Root": root(lift=lift * H * (1 - abs(s)), roll=roll_amp * s, pitch=lean, side=side * s),
-                    "Shell": lid(-6 - 3 * (1 - abs(s))), "Head": head(0.02, 0, yaw=4 * s)}
+                    "Shell": lid(-6 - 3 * (1 - abs(s))), "Head": head(0.02, 0, yaw=4 * s),
+                    "Leg.FL": {"r": q(X, -30 * s)}, "Leg.BR": {"r": q(X, -30 * s)},
+                    "Leg.FR": {"r": q(X, 30 * s)}, "Leg.BL": {"r": q(X, 30 * s)},
+                    "Tail": {"r": q(Z, -18 * s)}}
         return k
 
     actions = {
@@ -318,7 +345,10 @@ def build(out_dir):
                             22: {"Shell": lid(-30), "Head": head(0.05, 0.0, pitch=-10), "Root": root(lift=0.98, roll=90)},
                             36: {"Shell": lid(-10), "Head": head(-0.05, -0.03, pitch=30),
                                  "Root": root(lift=1.34, roll=180)},
-                            44: {"Shell": lid(-12), "Head": head(0.02, -0.04, pitch=40), "Root": root(lift=1.4, roll=176)},
+                            44: {"Shell": lid(-12), "Head": head(0.02, -0.04, pitch=40), "Root": root(lift=1.4, roll=176),
+                                 "Leg.FL": {"r": q(X, 35)}, "Leg.BR": {"r": q(X, -35)}, "Leg.FR": {"r": q(X, -30)}, "Leg.BL": {"r": q(X, 30)}},
+                            52: {"Shell": lid(-10), "Head": head(0.02, -0.05, pitch=42), "Root": root(lift=1.37, roll=179),
+                                 "Leg.FL": {"r": q(X, -30)}, "Leg.BR": {"r": q(X, 30)}, "Leg.FR": {"r": q(X, 35)}, "Leg.BL": {"r": q(X, -35)}},
                             60: {"Shell": lid(-8), "Head": head(0.02, -0.05, pitch=45), "Root": root(lift=1.36, roll=180)}}),
         "Taunt": (50, False, {0: {"Shell": lid(-8)},
                               6: {"Shell": lid(-35), "Root": root(lift=0.08)}, 10: {"Shell": lid(2), "Root": root(s=(1.06, 0.92, 1.06))},
