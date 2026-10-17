@@ -1,0 +1,39 @@
+# Game server for development: Nakama + PostgreSQL on this PC.
+# Start:  docker compose up -d     (run inside this folder)
+# Stop:   docker compose down
+# Admin console: http://127.0.0.1:7351  (user admin, password password)
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nakama
+      POSTGRES_PASSWORD: localdb
+    volumes:
+      - data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "nakama"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  nakama:
+    image: heroiclabs/nakama:3.40.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - "/bin/sh"
+      - "-ecx"
+      - >
+        /nakama/nakama migrate up --database.address postgres:localdb@postgres:5432/nakama &&
+        exec /nakama/nakama --name nakama1 --database.address postgres:localdb@postgres:5432/nakama
+        --logger.level INFO --session.token_expiry_sec 86400
+    ports:
+      - "7349:7349"   # gRPC
+      - "7350:7350"   # game client API (the game connects here)
+      - "7351:7351"   # admin console in the browser
+
+volumes:
+  data:

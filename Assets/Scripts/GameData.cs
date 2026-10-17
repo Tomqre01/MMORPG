@@ -203,9 +203,21 @@ namespace MuProto
             return save;
         }
 
+        // Raised after every save with the saved JSON; Online copies it to the server.
+        public static event System.Action<string> Saved;
+
         public static void Save(PlayerSave save)
         {
-            PlayerPrefs.SetString(Key, JsonUtility.ToJson(save));
+            string json = JsonUtility.ToJson(save);
+            PlayerPrefs.SetString(Key, json);
+            PlayerPrefs.Save();
+            Saved?.Invoke(json);
+        }
+
+        // Replaces the device save with one from the server (before the player is created).
+        public static void SetJson(string json)
+        {
+            PlayerPrefs.SetString(Key, json);
             PlayerPrefs.Save();
         }
 
