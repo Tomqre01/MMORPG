@@ -6,7 +6,7 @@
 | ชื่อไฟล์ prefab | ใช้กับ |
 |---|---|
 | `Player` | ตัวละครของเรา (ใช้กับทุกคลาส ถ้าไม่ได้ใส่โมเดลแยกคลาส) |
-| `Knight` / `Mage` / `Archer` | โมเดลแยกตามคลาส (ถ้ามี จะใช้แทน `Player`) |
+| `DarkKnight` / `DarkWizard` / `Elf` | โมเดลแยกตามคลาส ปั้นใน Blender แล้ว (`<Class>_Rigged.fbx`) จะใช้แทน `Player` |
 | `Slime` | มอนโซน Lv1 (มีโมเดลของเราเองแล้ว `Slime_Rigged.fbx`) |
 | `Goblin` | มอนโซน Lv5 |
 | `Orc` | มอนโซน Lv10 |
@@ -97,3 +97,18 @@ GetHit, Dizzy, Die, Taunt, Victory, SenseSomethingStart, SenseSomethingRT
 ![TurtleShell: ยืน, ตี, ตาย](images/turtleshell.png)
 
 รันแบบเดียวกับสคริปต์อื่น ได้ไฟล์ `Turtle/Turtle_Rigged.fbx` (เต่าน่ารักใน `Pet` ยังมาจาก `build_slime_turtle.py`)
+
+## ตัวละคร 3 คลาส (ปั้นใน Blender ทั้งตัว)
+สคริปต์ `Tools/Blender/build_heroes.py` ปั้นตัวละครทั้ง 3 คลาสพร้อมกระดูกและท่า แล้ว export ไปที่ `Resources/Models/<Class>/<Class>_Rigged.fbx`
+เป็นงานออกแบบของเราเองตามแนวคลาสแบบ MU (ไม่ได้ลอกงานศิลป์ของเกมใด)
+
+| ![Dark Knight](images/DarkKnight_Preview.png) | ![Dark Wizard](images/DarkWizard_Preview.png) | ![Elf](images/Elf_Preview.png) |
+|---|---|---|
+| Dark Knight: เกราะเหล็กดำขอบทอง หมวกเขา ผ้าคลุมแดง ดาบยาว | Dark Wizard: เสื้อคลุมยาวมีฮู้ด บ่าทอง ผ้าคลุมม่วง คทาลูกแก้วเรืองแสง | Elf: ชุดหนังสีเขียว กระโปรงขาว ผมยาวสีทอง มงกุฎ คันธนูและกระบอกลูกธนู |
+
+ท่าทาง (30 fps): `Idle`, `Run`, `Attack01` (ตีปกติ), `Attack02` (สกิล), `GetHit`, `Die`
+กระดูกชุดเดียวกันทั้ง 3 คลาส แต่ละชิ้นผูกกับกระดูกเดียว (แบบ rigid) อาวุธอยู่บนกระดูก `Weapon` ที่มือ
+
+วิธีรันใหม่: เปิด Blender > Text Editor > Open `Assets/Tools/build_heroes.py` > Run Script (Alt+P)
+แก้สี วัสดุ ทรง หรือท่าได้ในสคริปต์ (`CLASSES` คือสีของแต่ละคลาส, `actions_for` คือท่า)
+
