@@ -162,6 +162,7 @@ namespace MuProto
             PlantTrees(zones);
 
             HUD.Create();
+            WorldSync.Create();
         }
 
         static void PlantTrees(List<MonsterSpawner> zones)

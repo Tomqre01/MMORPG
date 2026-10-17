@@ -19,6 +19,8 @@ namespace MuProto
         bool movedThisFrame;
         float actionLockUntil;
 
+        public bool InAction => Time.time < actionLockUntil; // attacking or flinching
+
         public static int RollDamage(int atk, float multiplier, out bool crit)
         {
             crit = Random.value < 0.1f;
