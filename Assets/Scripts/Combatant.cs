@@ -11,6 +11,10 @@ namespace MuProto
         public abstract int Def { get; }
         public bool IsDead => Hp <= 0;
 
+        // Walkable area; the field by default, the arena while inside a dungeon.
+        public static readonly Rect FieldBounds = new Rect(-48f, -48f, 96f, 96f);
+        public Rect Bounds = FieldBounds;
+
         protected ModelAnimator anim; // null when using placeholder shapes
         bool movedThisFrame;
         float actionLockUntil;
@@ -46,8 +50,8 @@ namespace MuProto
             if (direction.sqrMagnitude < 0.0001f) return;
             direction.Normalize();
             Vector3 p = transform.position + direction * speed * Time.deltaTime;
-            p.x = Mathf.Clamp(p.x, -48f, 48f);
-            p.z = Mathf.Clamp(p.z, -48f, 48f);
+            p.x = Mathf.Clamp(p.x, Bounds.xMin, Bounds.xMax);
+            p.z = Mathf.Clamp(p.z, Bounds.yMin, Bounds.yMax);
             transform.position = p;
             movedThisFrame = true;
             Face(direction);
