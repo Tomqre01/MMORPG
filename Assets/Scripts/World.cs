@@ -148,6 +148,7 @@ namespace MuProto
             var zones = new List<MonsterSpawner>
             {
                 MonsterSpawner.Create("Slime", 1, new Vector3(0, 0, 14), 7, 8, new Color(0.4f, 0.9f, 0.4f), 0.8f),
+                MonsterSpawner.Create("Turtle", 3, new Vector3(-26, 0, 0), 7, 6, new Color(0.3f, 0.7f, 0.75f), 0.8f),
                 MonsterSpawner.Create("Goblin", 5, new Vector3(-24, 0, 26), 8, 8, new Color(0.65f, 0.45f, 0.25f), 1f),
                 MonsterSpawner.Create("Orc", 10, new Vector3(24, 0, 28), 8, 6, new Color(0.7f, 0.2f, 0.2f), 1.3f),
                 MonsterSpawner.Create("Golem", 20, new Vector3(0, 0, -30), 7, 3, new Color(0.55f, 0.55f, 0.6f), 2f),

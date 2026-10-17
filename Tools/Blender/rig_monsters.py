@@ -132,6 +132,10 @@ def build_armature(name, spec):
             eb = arm_data.edit_bones[bone]
             eb.parent = arm_data.edit_bones[parent]
             eb.use_connect = False
+    # a still top bone: Unity mis-applies scale/motion keyed on the topmost bone, so Root gets a parent
+    origin = arm_data.edit_bones.new("Origin")
+    origin.head, origin.tail, origin.roll = B(0, 0, 0), B(0, 0.05, 0), 0.0
+    arm_data.edit_bones["Root"].parent = origin
     bpy.ops.object.mode_set(mode="OBJECT")
     return arm
 

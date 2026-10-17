@@ -7,11 +7,12 @@
 |---|---|
 | `Player` | ตัวละครของเรา (ใช้กับทุกคลาส ถ้าไม่ได้ใส่โมเดลแยกคลาส) |
 | `Knight` / `Mage` / `Archer` | โมเดลแยกตามคลาส (ถ้ามี จะใช้แทน `Player`) |
-| `Pet` | สัตว์เลี้ยง |
-| `Slime` | มอนโซน Lv1 |
+| `Slime` | มอนโซน Lv1 (มีโมเดลของเราเองแล้ว `Slime_Rigged.fbx`) |
 | `Goblin` | มอนโซน Lv5 |
 | `Orc` | มอนโซน Lv10 |
 | `Golem` | มอนโซน Lv20 |
+| `Pet` | สัตว์เลี้ยงของผู้เล่น (เต่า `Pet_Rigged.fbx`) |
+| `Turtle` | มอนโซน Lv3 (TurtleShell หนามแหลม `Turtle_Rigged.fbx`) |
 | `Tree` | ต้นไม้ในแผนที่ |
 
 โค้ดจะปรับขนาดโมเดลให้พอดีเอง และหาท่าทางจากชื่อคลิป (idle, run/walk, attack, hit, die) ให้เอง
@@ -73,3 +74,26 @@
 4. กลับมาที่ Unity รอ import เสร็จ แล้วกด Play เกมจะเลือกไฟล์ที่มีกระดูกให้เอง
 
 จะแก้แค่ตัวเดียวก็ได้ ใส่ชื่อในบรรทัด `ONLY = ["Orc"]`
+
+## Slime กับเต่าสัตว์เลี้ยง (ปั้นใน Blender ทั้งตัว)
+สคริปต์ `Tools/Blender/build_slime_turtle.py` ปั้นโมเดล ใส่กระดูก ทำท่า Idle, Walk, Attack, Hit, Die และ export ให้เลย
+ไม่ต้องใช้โมเดลฟรีจาก Asset Store อีกต่อไป
+
+| ![Slime](images/slime.png) | ![เต่า](images/pet_turtle.png) |
+|---|---|
+
+1. เปิด Blender ไปที่แท็บ **Scripting** แล้วแก้บรรทัด `MODELS_DIR = r""` ให้ชี้ไปที่ `Assets\Resources\Models` ของโปรเจกต์
+2. กด **Run Script** จะได้ `Slime/Slime_Rigged.fbx`, `Turtle/Turtle_Rigged.fbx` และ `Pet/Pet_Rigged.fbx` (เต่าตัวเดียวกัน) ภาพ preview อยู่ที่ `Assets/Tools/Previews`
+3. กลับไป Unity แล้วกด Play
+
+ไฟล์ชื่อ `<ชื่อ>_Rigged` ในโฟลเดอร์จะถูกเลือกก่อนเสมอ ถึงจะมี prefab จากแพ็กฟรีอยู่ในโฟลเดอร์เดียวกันก็ตาม
+
+## TurtleShell (มอนโซน Lv3)
+สคริปต์ `Tools/Blender/build_turtleshell.py` ปั้นกระดองหนามที่เปิดปิดได้แบบหอย มีตัวโผล่หน้าออกมาตรงกลาง
+ท่าทางชื่อและความยาวตรงกับแพ็ก RPG Monster Duo (30 fps) ครบ 18 ท่า:
+IdleNormal, IdleBattle, Walk, WalkBack, WalkLeft, WalkRight, Run, Attack01, Attack02, Defend, DefendHit,
+GetHit, Dizzy, Die, Taunt, Victory, SenseSomethingStart, SenseSomethingRT
+
+![TurtleShell: ยืน, ตี, ตาย](images/turtleshell.png)
+
+รันแบบเดียวกับสคริปต์อื่น ได้ไฟล์ `Turtle/Turtle_Rigged.fbx` (เต่าน่ารักใน `Pet` ยังมาจาก `build_slime_turtle.py`)
