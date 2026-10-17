@@ -6,7 +6,11 @@ namespace MuProto
     // Keeps a zone filled with monsters of one level.
     public class MonsterSpawner : MonoBehaviour
     {
-        public string MonsterName;
+        public static readonly List<MonsterSpawner> Field = new List<MonsterSpawner>(); // open-world zones, by level
+
+        public string MonsterName;   // shown and used by quests
+        public string ModelName;     // Resources/Models/<ModelName>
+        public Color Tint = Color.white;
         public int Level;
         public int Count;
         public float Radius;
@@ -19,7 +23,8 @@ namespace MuProto
         int alive;
         float timer;
 
-        public static MonsterSpawner Create(string monsterName, int level, Vector3 center, float radius, int count, Color color, float scale, bool showZone = true)
+        public static MonsterSpawner Create(string monsterName, int level, Vector3 center, float radius, int count, Color color, float scale,
+            bool showZone = true, string model = null, Color? tint = null)
         {
             GameObject zone;
             if (showZone)
@@ -39,6 +44,8 @@ namespace MuProto
 
             var s = zone.AddComponent<MonsterSpawner>();
             s.MonsterName = monsterName;
+            s.ModelName = model ?? monsterName;
+            s.Tint = tint ?? Color.white;
             s.Level = level;
             s.Count = count;
             s.Radius = radius;
@@ -68,6 +75,25 @@ namespace MuProto
             m.Bounds = Bounds;
             alive++;
             return m;
+        }
+
+        public void Track() => alive++; // a monster made outside Spawn (structures)
+
+        public Vector3 Center => transform.position;
+
+        // Highest open-world zone the player can handle.
+        public static MonsterSpawner BestFor(int level)
+        {
+            MonsterSpawner best = null;
+            foreach (var z in Field)
+                if (z.Level <= level + 2 && (best == null || z.Level > best.Level)) best = z;
+            return best ?? (Field.Count > 0 ? Field[0] : null);
+        }
+
+        public static MonsterSpawner Named(string name)
+        {
+            foreach (var z in Field) if (z.MonsterName == name) return z;
+            return null;
         }
 
         public void NotifyDeath(Monster m)
@@ -151,28 +177,61 @@ namespace MuProto
             cam.transform.position = player.transform.position + new Vector3(0, 13f, -10f);
             cam.gameObject.AddComponent<CameraFollow>().Target = player.transform;
 
-            var zones = new List<MonsterSpawner>
+            BuildTown();
+
+            MonsterSpawner.Field.Clear();
+            MonsterSpawner.Field.AddRange(new[]
             {
-                MonsterSpawner.Create("Slime", 1, new Vector3(0, 0, 14), 7, 8, new Color(0.4f, 0.9f, 0.4f), 0.8f),
-                MonsterSpawner.Create("Turtle", 3, new Vector3(-26, 0, 0), 7, 6, new Color(0.3f, 0.7f, 0.75f), 0.8f),
+                MonsterSpawner.Create("Slime", 1, new Vector3(0, 0, 16), 7, 8, new Color(0.4f, 0.9f, 0.4f), 0.8f),
+                MonsterSpawner.Create("Turtle", 3, new Vector3(-24, 0, 2), 7, 6, new Color(0.3f, 0.7f, 0.75f), 0.8f),
                 MonsterSpawner.Create("Goblin", 5, new Vector3(-24, 0, 26), 8, 8, new Color(0.65f, 0.45f, 0.25f), 1f),
                 MonsterSpawner.Create("Orc", 10, new Vector3(24, 0, 28), 8, 6, new Color(0.7f, 0.2f, 0.2f), 1.3f),
                 MonsterSpawner.Create("Golem", 20, new Vector3(0, 0, -30), 7, 3, new Color(0.55f, 0.55f, 0.6f), 2f),
-            };
-            PlantTrees(zones);
+                MonsterSpawner.Create("Orc Warlord", 35, new Vector3(30, 0, 2), 7, 6, new Color(0.45f, 0.1f, 0.15f), 1.6f,
+                    model: "Orc", tint: new Color(1f, 0.55f, 0.55f)),
+                MonsterSpawner.Create("Stone Golem", 55, new Vector3(-28, 0, -28), 7, 4, new Color(0.35f, 0.35f, 0.42f), 2.3f,
+                    model: "Golem", tint: new Color(0.6f, 0.6f, 0.75f)),
+                MonsterSpawner.Create("Shell Lord", 80, new Vector3(28, 0, -28), 7, 5, new Color(0.15f, 0.35f, 0.45f), 1.8f,
+                    model: "Turtle", tint: new Color(0.7f, 0.5f, 1f)),
+            });
+            var keepClear = new List<(Vector3, float)> { (Vector3.zero, GameData.TownRadius + 3f), (WorldBoss.Lair, 8f) };
+            foreach (var z in MonsterSpawner.Field) keepClear.Add((z.Center, z.Radius * 1.2f + 2.5f));
+            PlantTrees(keepClear);
 
             HUD.Create();
             WorldSync.Create();
+            WorldBoss.Create();
         }
 
-        static void PlantTrees(List<MonsterSpawner> zones)
+        // Safe zone around the spawn point: no monsters follow you in and no PK.
+        static void BuildTown()
+        {
+            var plaza = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            Object.Destroy(plaza.GetComponent<Collider>());
+            plaza.name = "Town";
+            plaza.transform.position = new Vector3(0, 0.015f, 0);
+            plaza.transform.localScale = new Vector3(GameData.TownRadius * 2f, 0.01f, GameData.TownRadius * 2f);
+            Paint.Color(plaza, new Color(0.62f, 0.58f, 0.5f));
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI / 4f;
+                var post = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                Object.Destroy(post.GetComponent<Collider>());
+                post.transform.position = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * GameData.TownRadius + Vector3.up * 0.6f;
+                post.transform.localScale = new Vector3(0.35f, 0.6f, 0.35f);
+                Paint.Color(post, new Color(0.85f, 0.8f, 0.65f));
+            }
+            WorldLabel.Create(new Vector3(0, 0, GameData.TownRadius - 1f), "Lorencia (safe zone)", new Color(1f, 0.95f, 0.7f), 3f);
+        }
+
+        static void PlantTrees(List<(Vector3 center, float radius)> keepClear)
         {
             var state = Random.state;
             Random.InitState(42);
             for (int i = 0; i < 70; i++)
             {
                 var p = new Vector3(Random.Range(-47f, 47f), 0, Random.Range(-47f, 47f));
-                if (p.magnitude < 6f || InsideZone(p, zones)) continue;
+                if (Blocked(p, keepClear)) continue;
                 if (ModelLibrary.Find("Tree") != null)
                 {
                     var holder = new GameObject("Tree").transform;
@@ -195,14 +254,14 @@ namespace MuProto
             Random.state = state;
         }
 
-        // Keeps trees off the zone discs (plus a margin for the tree crown) so they never hide monsters.
-        static bool InsideZone(Vector3 p, List<MonsterSpawner> zones)
+        // Keeps trees off the town, the zone discs and the boss lair so they never hide monsters.
+        static bool Blocked(Vector3 p, List<(Vector3 center, float radius)> keepClear)
         {
-            foreach (var z in zones)
+            foreach (var (c, r) in keepClear)
             {
-                Vector3 d = p - z.transform.position;
+                Vector3 d = p - c;
                 d.y = 0;
-                if (d.magnitude < z.Radius * 1.2f + 2.5f) return true;
+                if (d.magnitude < r) return true;
             }
             return false;
         }

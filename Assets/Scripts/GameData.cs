@@ -4,7 +4,7 @@ using UnityEngine;
 namespace MuProto
 {
     public enum Slot { Weapon, Armor, Helm, Boots }
-    public enum Rarity { Common, Rare, Epic }
+    public enum Rarity { Common, Rare, Epic } // shown as Normal, Excellent, Ancient
 
     [System.Serializable]
     public class Item
@@ -13,42 +13,69 @@ namespace MuProto
         public Slot slot;
         public Rarity rarity;
         public int level;
-        public int baseStat; // ATK for weapons, DEF for everything else
-        public int plus;     // enhance level (+0 .. +15)
+        public int tier = 1;     // 1..GameData.MaxTier; tier N needs (N-1) rebirths
+        public string classId;   // who can wear it
+        public int baseStat;     // ATK for weapons, DEF for everything else
+        public int plus;         // enhance level (+0 .. +15)
 
         public bool IsEmpty => string.IsNullOrEmpty(name);
-        public int Stat => Mathf.RoundToInt(baseStat * (1f + 0.15f * plus));
+        public int Stat => Mathf.RoundToInt(baseStat * (1f + 0.1f * plus + 0.06f * Mathf.Max(0, plus - 6) * Mathf.Max(0, plus - 6) / 3f));
         public string StatName => slot == Slot.Weapon ? "ATK" : "DEF";
         public string Label => (plus > 0 ? "+" + plus + " " : "") + name;
-        public int SellPrice => baseStat * 2 + plus * 20;
-        public int EnhanceCost => 50 * (plus + 1) * (plus + 1);
-        public float EnhanceChance => Mathf.Max(0.2f, 1f - plus * 0.08f);
+        public int SellPrice => baseStat * 2 + plus * 30 + (tier - 1) * 200;
         public bool CanEnhance => !IsEmpty && plus < GameData.MaxPlus;
+
+        // The class's main stat (STR, AGI or ENE) needed to wear it.
+        public int ReqStat => Mathf.RoundToInt((slot == Slot.Weapon ? 1f : 0.8f) * (15 + level * 1.2f + (tier - 1) * 60));
+        public int ReqRebirth => tier - 1;
+
+        // +1..+6 use a Jewel of Bless and always work. +7 and up use a Jewel of Soul and can fail.
+        public bool UsesSoul => plus >= 6;
+        public float EnhanceChance => plus < 6 ? 1f : Mathf.Max(0.15f, 0.6f - (plus - 6) * 0.05f);
+        public int EnhanceGold => 20 * (plus + 1) * (plus + 1);
     }
 
     [System.Serializable]
     public class PlayerSave
     {
+        public int version;           // GameData.SaveVersion; older saves start over
         public int level = 1;
+        public int rebirth;           // 0R, 1R, 2R ...
         public int exp;
         public int gold;
+        public string classId = "";   // empty until the player picks a class
+        public int str, agi, vit, ene; // allocated, including the class's starting values
+        public int freePoints;
+        public int[] skillLevels = { 1, 1, 1 };
         public List<Item> bag = new List<Item>();
         public List<Item> equipped = new List<Item>();
-        public string classId = "";   // empty until the player picks a class
-        public int feathers;          // wing upgrade material
-        public int petFood;           // pet upgrade material
-        public int wingsLevel;        // 0 = no wings
+
+        public int jewelBless, jewelSoul;
+        public int feathers;          // Condor Feather: wing levels
+        public int flames;            // Condor Flame: wing tiers
+        public int petFood;
+        public int wingTier;          // 0 = no wings
+        public int wingLevel;         // 0..Upgrades.WingLevelsPerTier inside the tier
         public int petLevel;          // 0 = no pet
-        public string dungeonDate = "";
-        public int dungeonRuns;       // runs used on dungeonDate
+        public int potions = 10;
+        public bool autoPotion = true;
+
+        public string bcDate = "", dsDate = "";
+        public int bcRuns, dsRuns;    // Blood Castle / Devil Square runs used on that date
+
+        public int questIndex, questProgress, huntsDone;
+        public int rebirthKills;      // Lv50+ monsters killed at Lv100 (rebirth quest)
+        public int pkPoints;          // above 0 = red name
+        public float pkClock;         // seconds until one PK point wears off
 
         public void EnsureSlots()
         {
             while (equipped.Count < 4) equipped.Add(new Item());
+            if (skillLevels == null || skillLevels.Length != 3) skillLevels = new[] { 1, 1, 1 };
         }
     }
 
-    public enum SkillKind { Single, SelfArea, TargetArea, Multi }
+    public enum SkillKind { Single, SelfArea, TargetArea, Multi, Dash, Buff }
 
     public class SkillDef
     {
@@ -59,14 +86,20 @@ namespace MuProto
         public float Radius;   // area size, or max targets for Multi
         public float Range;    // how far the target may be
         public Color Color;
+        public float Duration, BuffAtk, BuffDef, Heal; // Buff skills
     }
 
     public class ClassDef
     {
         public string Id, Name, Description;
-        public float AtkMul, DefMul, HpMul;
-        public float AttackRange, AttackInterval;
+        public int BaseStr, BaseAgi, BaseVit, BaseEne;
+        public float StrAtk, AgiAtk, EneAtk;   // ATK per point
+        public float BaseHp, HpPerVit, HpPerLevel, DefMul;
+        public float AttackRange, AttackInterval, MoveBonus;
         public bool Ranged;
+        public string MainStat;                 // STR, AGI or ENE: what gear asks for
+        public string Weapon, Armor, Helm;      // item names
+        public string[] Wings;                  // wing name per tier
         public Color BodyColor;
         public SkillDef[] Skills;
     }
@@ -77,38 +110,50 @@ namespace MuProto
         {
             new ClassDef
             {
-                Id = "Knight", Name = "Knight", Description = "Tough melee fighter\nHigh HP and DEF",
-                AtkMul = 1f, DefMul = 1.3f, HpMul = 1.3f, AttackRange = 2.2f, AttackInterval = 0.6f,
+                Id = "DarkKnight", Name = "Dark Knight", Description = "Melee, lots of HP\nCharges in and spins\nits blade through crowds",
+                BaseStr = 28, BaseAgi = 20, BaseVit = 25, BaseEne = 10,
+                StrAtk = 1.5f, AgiAtk = 0.25f, EneAtk = 0f, BaseHp = 120, HpPerVit = 10, HpPerLevel = 8, DefMul = 1.2f,
+                AttackRange = 2.2f, AttackInterval = 0.6f, MainStat = "STR",
+                Weapon = "Sword", Armor = "Armor", Helm = "Helm",
+                Wings = new[] { "Wings of Satan", "Wings of Dragon", "Wings of Doom", "Wings of Conqueror" },
                 BodyColor = new Color(0.25f, 0.45f, 0.95f),
                 Skills = new[]
                 {
-                    new SkillDef { Name = "Slash", Cooldown = 3, Kind = SkillKind.Single, Multiplier = 2.5f, Range = 3.2f, Color = new Color(1f, 0.6f, 0.2f) },
-                    new SkillDef { Name = "Whirl", Cooldown = 6, Kind = SkillKind.SelfArea, Multiplier = 1.6f, Radius = 3.5f, Color = new Color(0.3f, 0.9f, 1f) },
-                    new SkillDef { Name = "Fury", Cooldown = 12, Kind = SkillKind.SelfArea, Multiplier = 3f, Radius = 6f, Color = new Color(1f, 0.3f, 0.2f) },
+                    new SkillDef { Name = "Lunge", Cooldown = 3, Kind = SkillKind.Dash, Multiplier = 2.4f, Range = 8f, Radius = 1.6f, Color = new Color(1f, 0.6f, 0.2f) },
+                    new SkillDef { Name = "Cyclone", Cooldown = 5, Kind = SkillKind.SelfArea, Multiplier = 1.8f, Radius = 3.5f, Color = new Color(0.3f, 0.9f, 1f) },
+                    new SkillDef { Name = "Twisting\nSlash", Cooldown = 10, Kind = SkillKind.SelfArea, Multiplier = 3f, Radius = 6f, Color = new Color(1f, 0.3f, 0.2f) },
                 },
             },
             new ClassDef
             {
-                Id = "Mage", Name = "Mage", Description = "Ranged magic\nHuge area damage, fragile",
-                AtkMul = 1.3f, DefMul = 0.8f, HpMul = 0.85f, AttackRange = 9f, AttackInterval = 0.9f, Ranged = true,
+                Id = "DarkWizard", Name = "Dark Wizard", Description = "Ranged magic, fragile\nClears whole packs\nwith Hellfire",
+                BaseStr = 18, BaseAgi = 18, BaseVit = 15, BaseEne = 30,
+                StrAtk = 0.2f, AgiAtk = 0.1f, EneAtk = 1.7f, BaseHp = 90, HpPerVit = 6, HpPerLevel = 5, DefMul = 0.8f,
+                AttackRange = 9f, AttackInterval = 0.9f, Ranged = true, MainStat = "ENE",
+                Weapon = "Staff", Armor = "Robe", Helm = "Hood",
+                Wings = new[] { "Wings of Heaven", "Wings of Soul", "Wings of Despair", "Wings of Eternal" },
                 BodyColor = new Color(0.6f, 0.3f, 0.9f),
                 Skills = new[]
                 {
-                    new SkillDef { Name = "Fireball", Cooldown = 3, Kind = SkillKind.Single, Multiplier = 2.5f, Range = 10f, Color = new Color(1f, 0.45f, 0.1f) },
-                    new SkillDef { Name = "Frost", Cooldown = 6, Kind = SkillKind.SelfArea, Multiplier = 1.6f, Radius = 4f, Color = new Color(0.5f, 0.85f, 1f) },
-                    new SkillDef { Name = "Meteor", Cooldown = 12, Kind = SkillKind.TargetArea, Multiplier = 3f, Radius = 5f, Range = 10f, Color = new Color(0.9f, 0.2f, 0.1f) },
+                    new SkillDef { Name = "Energy\nBall", Cooldown = 2, Kind = SkillKind.Single, Multiplier = 2.2f, Range = 10f, Color = new Color(0.4f, 0.8f, 1f) },
+                    new SkillDef { Name = "Evil\nSpirits", Cooldown = 6, Kind = SkillKind.Multi, Multiplier = 1.7f, Radius = 8, Range = 9f, Color = new Color(0.75f, 0.4f, 1f) },
+                    new SkillDef { Name = "Hellfire", Cooldown = 11, Kind = SkillKind.SelfArea, Multiplier = 3.2f, Radius = 6.5f, Color = new Color(1f, 0.35f, 0.1f) },
                 },
             },
             new ClassDef
             {
-                Id = "Archer", Name = "Archer", Description = "Fast ranged attacks\nHits many targets",
-                AtkMul = 1.1f, DefMul = 1f, HpMul = 1f, AttackRange = 8f, AttackInterval = 0.45f, Ranged = true,
+                Id = "Elf", Name = "Elf", Description = "Fast ranged bow\nMultiple Shot and a\nself buff, good at bosses",
+                BaseStr = 22, BaseAgi = 25, BaseVit = 20, BaseEne = 15,
+                StrAtk = 0.5f, AgiAtk = 1.1f, EneAtk = 0f, BaseHp = 100, HpPerVit = 8, HpPerLevel = 6, DefMul = 1f,
+                AttackRange = 8f, AttackInterval = 0.45f, Ranged = true, MoveBonus = 0.5f, MainStat = "AGI",
+                Weapon = "Bow", Armor = "Vest", Helm = "Circlet",
+                Wings = new[] { "Wings of Fairy", "Wings of Spirit", "Wings of Illusion", "Wings of Mystery" },
                 BodyColor = new Color(0.25f, 0.7f, 0.35f),
                 Skills = new[]
                 {
-                    new SkillDef { Name = "Power Shot", Cooldown = 3, Kind = SkillKind.Single, Multiplier = 2.5f, Range = 9f, Color = new Color(1f, 0.9f, 0.3f) },
-                    new SkillDef { Name = "Multi Shot", Cooldown = 6, Kind = SkillKind.Multi, Multiplier = 1.4f, Radius = 5, Range = 9f, Color = new Color(0.6f, 1f, 0.5f) },
-                    new SkillDef { Name = "Arrow Rain", Cooldown = 12, Kind = SkillKind.TargetArea, Multiplier = 2.6f, Radius = 4f, Range = 9f, Color = new Color(0.9f, 0.9f, 0.5f) },
+                    new SkillDef { Name = "Power\nShot", Cooldown = 2.5f, Kind = SkillKind.Single, Multiplier = 2.4f, Range = 9f, Color = new Color(1f, 0.9f, 0.3f) },
+                    new SkillDef { Name = "Multiple\nShot", Cooldown = 5, Kind = SkillKind.Multi, Multiplier = 1.6f, Radius = 6, Range = 9f, Color = new Color(0.6f, 1f, 0.5f) },
+                    new SkillDef { Name = "Greater\nDamage", Cooldown = 35, Kind = SkillKind.Buff, Duration = 20, BuffAtk = 0.3f, BuffDef = 0.2f, Heal = 0.2f, Color = new Color(1f, 0.85f, 0.4f) },
                 },
             },
         };
@@ -118,87 +163,153 @@ namespace MuProto
             foreach (var c in All) if (c.Id == id) return c;
             return All[0];
         }
+
+        public static int SkillUpgradeGold(int lv) => 200 * lv * lv;
+        public const int MaxSkillLevel = 20;
     }
 
     public static class Upgrades
     {
-        public const int MaxWings = 50;
+        public const int MaxWingTier = 4;
+        public const int WingLevelsPerTier = 10;
         public const int MaxPet = 50;
-        public const int DungeonRunsPerDay = 3;
         public const int PetAdoptCost = 200;
+        public const int BloodCastleRuns = 2;
+        public const int DevilSquareRuns = 2;
+        public const float PotionHeal = 0.35f;
 
-        public static int WingFeathers(int lv) => 2 + lv;
-        public static int WingGold(int lv) => 100 * (lv + 1);
         public static int PetFood(int lv) => 2 + lv;
         public static int PetGold(int lv) => 80 * (lv + 1);
+        public static int PotionPrice(int level) => 10 + level * 2;
 
-        public static Color WingColor(int lv)
+        // Wings: craft, then +1 level at a time with Condor Feathers; at the top of a tier,
+        // Condor Flames move it to the next tier.
+        public static int WingPower(int tier, int level) => tier <= 0 ? 0 : (tier - 1) * 15 + 10 + level;
+        public static float WingSpeed(int tier, int level) => tier <= 0 ? 0 : tier * 0.35f + level * 0.03f;
+
+        public enum WingStep { Craft, Level, Tier, Max }
+
+        public static WingStep NextWingStep(PlayerSave d) =>
+            d.wingTier == 0 ? WingStep.Craft :
+            d.wingLevel < WingLevelsPerTier ? WingStep.Level :
+            d.wingTier < MaxWingTier ? WingStep.Tier : WingStep.Max;
+
+        // feathers, flames, gold for the next step
+        public static void WingCost(PlayerSave d, out int feathers, out int flames, out int gold)
+        {
+            switch (NextWingStep(d))
+            {
+                case WingStep.Craft: feathers = 10; flames = 1; gold = 2000; break;
+                case WingStep.Level: feathers = 1 + d.wingLevel / 2 + d.wingTier; flames = 0; gold = 300 * d.wingTier * (d.wingLevel + 1); break;
+                case WingStep.Tier: feathers = 5 * d.wingTier; flames = 2 * d.wingTier; gold = 5000 * d.wingTier; break;
+                default: feathers = flames = gold = 0; break;
+            }
+        }
+
+        public static Color WingColor(int tier)
         {
             Color[] tiers = { Color.white, new Color(0.4f, 0.7f, 1f), new Color(0.75f, 0.45f, 1f), new Color(1f, 0.8f, 0.2f), new Color(1f, 0.3f, 0.25f) };
-            return tiers[Mathf.Clamp((lv - 1) / 10, 0, tiers.Length - 1)];
+            return tiers[Mathf.Clamp(tier, 0, tiers.Length - 1)];
         }
     }
 
     public static class GameData
     {
+        public const int SaveVersion = 2;
         public const int MaxPlus = 15;
         public const int BagSize = 30;
+        public const int MaxLevel = 100;
+        public const int MaxRebirth = 10;
+        public const int MaxTier = 6;
+        public const int PointsPerLevel = 5;
+        public const int RebirthBonusPoints = 50;
+        public const int RebirthKillsNeeded = 100;
+        public const int RebirthKillMinLevel = 50;
+        public const float TownRadius = 6f;
 
-        static readonly string[] SlotNames = { "Sword", "Armor", "Helm", "Boots" };
+        static readonly string[] TierNames = { "Bronze", "Silver", "Dragon", "Black Dragon", "Great Dragon", "Dark Phoenix" };
 
-        public static int ExpToNext(int level) => 20 + level * level * 10;
+        public static int RebirthGold(int rebirth) => 20000 * (rebirth + 1);
+        public static int ExpToNext(int level, int rebirth) => Mathf.RoundToInt((20 + level * level * 8) * (1f + 0.25f * rebirth));
+
+        // Monster numbers by level (field, dungeons and bosses all use these).
+        public static int MonsterHp(int lv) => Mathf.RoundToInt(40 + lv * 30 + lv * lv * 0.8f);
+        public static int MonsterAtk(int lv) => Mathf.RoundToInt(6 + lv * 4 + lv * lv * 0.02f);
+        public static int MonsterDef(int lv) => lv * 2;
+        public static int MonsterExp(int lv) => Mathf.RoundToInt(10 + lv * 6 + lv * lv * 0.6f);
+
+        public static string RarityName(Rarity r) => r == Rarity.Epic ? "Ancient" : r == Rarity.Rare ? "Excellent" : "Normal";
 
         public static Color RarityColor(Rarity r)
         {
             switch (r)
             {
-                case Rarity.Rare: return new Color(0.35f, 0.65f, 1f);
-                case Rarity.Epic: return new Color(0.85f, 0.45f, 1f);
+                case Rarity.Rare: return new Color(0.35f, 1f, 0.45f);  // MU excellent green
+                case Rarity.Epic: return new Color(1f, 0.75f, 0.25f);  // ancient gold
                 default: return Color.white;
             }
         }
 
-        public static Item MakeItem(Slot slot, Rarity rarity, int level)
+        public static string TierName(int tier) => TierNames[Mathf.Clamp(tier - 1, 0, TierNames.Length - 1)];
+
+        public static Item MakeItem(Slot slot, Rarity rarity, int level, int tier, string classId)
         {
-            float mult = rarity == Rarity.Epic ? 2.5f : rarity == Rarity.Rare ? 1.6f : 1f;
-            float baseValue = slot == Slot.Weapon ? 5 + level * 3f : 2 + level * 1.5f;
-            string prefix = rarity == Rarity.Epic ? "Legend " : rarity == Rarity.Rare ? "Fine " : "";
+            var cls = Classes.Get(classId);
+            float mult = (rarity == Rarity.Epic ? 2.5f : rarity == Rarity.Rare ? 1.6f : 1f) * (1f + 0.5f * (tier - 1));
+            float baseValue = slot == Slot.Weapon ? 8 + level * 3f : 2 + level * 1.5f;
+            string piece = slot == Slot.Weapon ? cls.Weapon : slot == Slot.Armor ? cls.Armor : slot == Slot.Helm ? cls.Helm : "Boots";
+            string prefix = rarity == Rarity.Epic ? "Ancient " : rarity == Rarity.Rare ? "Excellent " : "";
             return new Item
             {
-                name = prefix + SlotNames[(int)slot] + " Lv" + level,
+                name = prefix + TierName(tier) + " " + piece,
                 slot = slot,
                 rarity = rarity,
                 level = level,
+                tier = Mathf.Clamp(tier, 1, MaxTier),
+                classId = cls.Id,
                 baseStat = Mathf.RoundToInt(baseValue * mult),
             };
         }
 
-        public static Item RollDrop(int monsterLevel)
+        // Mostly gear for the killer's own class, at the tier their rebirth allows.
+        public static Item RollDrop(int monsterLevel, PlayerSave d, float epicBoost = 1f)
         {
             var slot = (Slot)Random.Range(0, 4);
             float r = Random.value;
-            var rarity = r < 0.05f ? Rarity.Epic : r < 0.30f ? Rarity.Rare : Rarity.Common;
-            return MakeItem(slot, rarity, monsterLevel);
+            var rarity = r < 0.04f * epicBoost ? Rarity.Epic : r < 0.25f ? Rarity.Rare : Rarity.Common;
+            string cls = Random.value < 0.85f ? d.classId : Classes.All[Random.Range(0, Classes.All.Length)].Id;
+            return MakeItem(slot, rarity, monsterLevel, 1 + Mathf.Min(d.rebirth, MaxTier - 1), cls);
         }
 
         public static PlayerSave NewSave()
         {
-            var save = new PlayerSave();
+            var save = new PlayerSave { version = SaveVersion };
             save.EnsureSlots();
-            save.equipped[(int)Slot.Weapon] = MakeItem(Slot.Weapon, Rarity.Common, 1);
             return save;
+        }
+
+        // Called when the class is picked: starting stats and a starter weapon.
+        public static void StartClass(PlayerSave s, ClassDef c)
+        {
+            s.classId = c.Id;
+            s.str = c.BaseStr; s.agi = c.BaseAgi; s.vit = c.BaseVit; s.ene = c.BaseEne;
+            s.freePoints = (s.level - 1) * PointsPerLevel + s.rebirth * RebirthBonusPoints;
+            s.equipped[(int)Slot.Weapon] = MakeItem(Slot.Weapon, Rarity.Common, 1, 1, c.Id);
         }
     }
 
     public static class SaveSystem
     {
-        const string Key = "muproto_save_v1";
+        const string Key = "muproto_save_v2";
 
         public static PlayerSave Load()
         {
             string json = PlayerPrefs.GetString(Key, "");
             if (string.IsNullOrEmpty(json)) return GameData.NewSave();
-            var save = JsonUtility.FromJson<PlayerSave>(json) ?? GameData.NewSave();
+            PlayerSave save = null;
+            try { save = JsonUtility.FromJson<PlayerSave>(json); } catch { }
+            // Saves from before the MU classic rework (no version) start over, as agreed.
+            if (save == null || save.version != GameData.SaveVersion) return GameData.NewSave();
             save.EnsureSlots();
             return save;
         }
