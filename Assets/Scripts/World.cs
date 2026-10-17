@@ -121,6 +121,12 @@ namespace MuProto
         static void Boot()
         {
             Application.targetFrameRate = 60;
+            LoginScreen.Show(BuildWorld);
+        }
+
+        // Runs after login (or "Play Offline"), so the player loads the save the server sent.
+        static void BuildWorld()
+        {
 
             var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";

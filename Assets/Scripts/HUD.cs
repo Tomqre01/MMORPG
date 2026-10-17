@@ -29,6 +29,12 @@ namespace MuProto
 
         public static void Create()
         {
+            NewCanvas("HUD").AddComponent<HUD>().Build();
+        }
+
+        // A full-screen overlay canvas at 1920x1080 reference size, plus an EventSystem if missing.
+        public static GameObject NewCanvas(string name)
+        {
             if (Object.FindAnyObjectByType<EventSystem>() == null)
             {
                 var es = new GameObject("EventSystem", typeof(EventSystem));
@@ -39,7 +45,7 @@ namespace MuProto
 #endif
             }
 
-            var go = new GameObject("HUD", typeof(RectTransform));
+            var go = new GameObject(name, typeof(RectTransform));
             var canvas = go.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             var scaler = go.AddComponent<CanvasScaler>();
@@ -47,7 +53,7 @@ namespace MuProto
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = 0.5f;
             go.AddComponent<GraphicRaycaster>();
-            go.AddComponent<HUD>().Build();
+            return go;
         }
 
         void Build()
