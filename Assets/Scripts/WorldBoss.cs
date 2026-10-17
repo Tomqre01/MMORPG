@@ -150,6 +150,7 @@ namespace MuProto
             boss = null;
             if (spawner != null) Destroy(spawner.gameObject, 2f);
             if (p == null) return;
+            if (myDamage >= maxHp * 0.02f) p.Data.bossKills++;
             if (myDamage < maxHp * 0.02f)
             {
                 HUD.Message(def.Name + " was defeated by other players", 3f);

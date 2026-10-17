@@ -125,6 +125,14 @@ namespace MuProto
 
         public float HpRatio => (float)Hp / maxHp;
 
+        // Arena shadows copy another player's numbers.
+        public void SetStats(int hp, int attack, int defense)
+        {
+            maxHp = Hp = hp;
+            atk = attack;
+            def = defense;
+        }
+
         void BuildHpBar(float height)
         {
             hpBar = new GameObject("HpBar").transform;

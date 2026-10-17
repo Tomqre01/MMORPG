@@ -42,22 +42,109 @@ namespace MuProto
         public bool IsRed => Data.pkPoints > 0;
         public bool BuffActive => Time.time < buffUntil;
         public float BuffLeft => Mathf.Max(0, buffUntil - Time.time);
-        public bool InTown => Bounds == FieldBounds && Flat(transform.position) < GameData.TownRadius;
+        public bool InTown => DungeonRun.Active == null && Maps.InTown(transform.position);
         public float RespawnIn => respawnTimer;
 
         // ---- Stats ----
 
+        // Everything gear, talents, title and mount add on top of the base stats. Rebuilt on every Commit.
+        public struct Bonus
+        {
+            public float atkPct, defPct, hpPct, crit, exc, zen, reduce, speedPct, skillPct, moveSpeed;
+            public bool lifeOnKill;
+            public int setPieces;
+            public string setName;
+        }
+
+        Bonus bonus;
+        public Bonus Bonuses => bonus;
+
         public int WingPower => Upgrades.WingPower(Data.wingTier, Data.wingLevel);
         float AtkBuff => BuffActive ? 1f + buffAtk : 1f;
         float DefBuff => BuffActive ? 1f + buffDef : 1f;
+        public bool Riding => Data.mountId >= 0 && Data.mountId < Growth.Mounts.Length && (Data.mountsOwned & (1 << Data.mountId)) != 0;
+
+        public void RecalcBonus()
+        {
+            var b = new Bonus();
+            var sets = new Dictionary<string, int>();
+            for (int i = 0; i < Data.equipped.Count; i++)
+            {
+                var it = Data.equipped[i];
+                if (it.IsEmpty || !CanEquip(it, out _)) continue;
+                if (it.opts != null)
+                    foreach (int o in it.opts)
+                        switch ((ExOpt)o)
+                        {
+                            case ExOpt.ExcDamage: b.exc += 0.1f; break;
+                            case ExOpt.AtkPct: b.atkPct += 0.05f; break;
+                            case ExOpt.DefPct: b.defPct += 0.05f; break;
+                            case ExOpt.HpPct: b.hpPct += 0.04f; break;
+                            case ExOpt.CritRate: b.crit += 0.05f; break;
+                            case ExOpt.ZenDrop: b.zen += 0.3f; break;
+                            case ExOpt.LifeOnKill: b.lifeOnKill = true; break;
+                            case ExOpt.DmgReduce: b.reduce += 0.04f; break;
+                            case ExOpt.AtkSpeed: b.speedPct += 0.07f; break;
+                        }
+                if (it.sockets != null)
+                    foreach (int g in it.sockets)
+                    {
+                        if (g <= 0) continue;
+                        int lv = g % 10;
+                        switch ((GemType)(g / 10))
+                        {
+                            case GemType.Ruby: b.atkPct += 0.015f * lv; break;
+                            case GemType.Sapphire: b.defPct += 0.02f * lv; break;
+                            case GemType.Emerald: b.hpPct += 0.02f * lv; break;
+                            case GemType.Topaz: b.crit += 0.01f * lv; break;
+                        }
+                    }
+                if (!string.IsNullOrEmpty(it.set))
+                {
+                    sets.TryGetValue(it.set, out int n);
+                    sets[it.set] = n + 1;
+                }
+            }
+            foreach (var kv in sets)
+                if (kv.Value > b.setPieces) { b.setPieces = kv.Value; b.setName = kv.Key; }
+            // Ancient set: 2 pieces ATK +5%, 3 DEF +8%, 4 HP +8%, 5 ATK +10% more.
+            if (b.setPieces >= 2) b.atkPct += 0.05f;
+            if (b.setPieces >= 3) b.defPct += 0.08f;
+            if (b.setPieces >= 4) b.hpPct += 0.08f;
+            if (b.setPieces >= 5) b.atkPct += 0.1f;
+
+            var t = Data.talents;
+            b.atkPct += t[0] * 0.02f;
+            b.defPct += t[1] * 0.02f;
+            b.hpPct += t[2] * 0.02f;
+            b.crit += t[3] * 0.01f;
+            b.skillPct += t[4] * 0.03f;
+            b.speedPct += t[5] * 0.01f;
+
+            if (Data.titleId >= 0 && Data.titleId < Growth.Titles.Length && Growth.Titles[Data.titleId].Unlocked(Data))
+            {
+                var title = Growth.Titles[Data.titleId];
+                b.atkPct += title.Atk;
+                b.defPct += title.Def;
+                b.hpPct += title.Hp;
+            }
+            if (Riding)
+            {
+                var m = Growth.Mounts[Data.mountId];
+                b.moveSpeed += m.Speed;
+                b.atkPct += m.AtkPct;
+                b.defPct += m.DefPct;
+            }
+            bonus = b;
+        }
 
         public override int Atk
         {
             get
             {
                 var c = Class;
-                float raw = Data.str * c.StrAtk + Data.agi * c.AgiAtk + Data.ene * c.EneAtk + GearStat(Slot.Weapon) + WingPower * 5;
-                return Mathf.RoundToInt(raw * AtkBuff);
+                float raw = Data.str * c.StrAtk + Data.agi * c.AgiAtk + Data.ene * c.EneAtk + GearStat(Slot.Weapon) + GearStat(Slot.Necklace) + WingPower * 5;
+                return Mathf.RoundToInt(raw * (1f + bonus.atkPct) * AtkBuff);
             }
         }
 
@@ -65,8 +152,8 @@ namespace MuProto
         {
             get
             {
-                float armor = GearStat(Slot.Armor) + GearStat(Slot.Helm) + GearStat(Slot.Boots);
-                return Mathf.RoundToInt(((Data.agi / 3f + Data.vit / 5f + armor) * Class.DefMul + WingPower * 3) * DefBuff);
+                float armor = GearStat(Slot.Armor) + GearStat(Slot.Helm) + GearStat(Slot.Boots) + GearStat(Slot.Gloves) + GearStat(Slot.Pants);
+                return Mathf.RoundToInt(((Data.agi / 3f + Data.vit / 5f + armor) * Class.DefMul + WingPower * 3) * (1f + bonus.defPct) * DefBuff);
             }
         }
 
@@ -75,21 +162,36 @@ namespace MuProto
             get
             {
                 var c = Class;
-                return Mathf.RoundToInt(c.BaseHp + Data.vit * c.HpPerVit + Data.level * c.HpPerLevel + Data.rebirth * 200 + WingPower * 40);
+                float raw = c.BaseHp + Data.vit * c.HpPerVit + Data.level * c.HpPerLevel + Data.rebirth * 200 + WingPower * 40
+                            + GearAt(7) + GearAt(GameData.Ring2Index);
+                return Mathf.RoundToInt(raw * (1f + bonus.hpPct));
             }
         }
 
-        public float AttackInterval => Class.AttackInterval / Mathf.Min(2.2f, 1f + Data.agi * 0.0015f);
-        public float MoveSpeed => 6f + Class.MoveBonus + Upgrades.WingSpeed(Data.wingTier, Data.wingLevel);
+        public float CritChance => 0.1f + bonus.crit;
+        public float AttackInterval => Class.AttackInterval / Mathf.Min(2.5f, (1f + Data.agi * 0.0015f) * (1f + bonus.speedPct));
+        public float MoveSpeed => 6f + Class.MoveBonus + Upgrades.WingSpeed(Data.wingTier, Data.wingLevel) + bonus.moveSpeed;
 
         public float SkillPower(int i)
         {
             float p = 1f + 0.06f * (Data.skillLevels[i] - 1);
             if (Class.MainStat != "ENE") p *= 1f + Data.ene * 0.001f; // energy sharpens everyone's skills a little
-            return p;
+            return p * (1f + bonus.skillPct);
         }
 
-        // Everything in one number: level, rebirth, stats, skills, gear, enhancement, wings and pet.
+        // Player damage roll: critical (x1.5) and excellent damage (x1.3) from gear and talents.
+        int Roll(float multiplier, out bool crit)
+        {
+            float dmg = Atk * multiplier * Random.Range(0.9f, 1.1f);
+            crit = Random.value < CritChance;
+            if (crit) dmg *= 1.5f;
+            if (Random.value < bonus.exc) { dmg *= 1.3f; crit = true; }
+            return Mathf.RoundToInt(dmg);
+        }
+
+        protected override int ReduceIncoming(int dmg) => Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - Mathf.Min(0.5f, bonus.reduce))));
+
+        // Everything in one number: level, rebirth, stats, skills, gear, enhancement, wings, pet, talents and mount.
         public int CombatPower
         {
             get
@@ -97,21 +199,23 @@ namespace MuProto
                 int skills = 0;
                 foreach (int lv in Data.skillLevels) skills += lv - 1;
                 int plus = 0;
-                foreach (var it in Data.equipped) if (!it.IsEmpty) plus += it.plus * it.plus * 8;
+                foreach (var it in Data.equipped) if (!it.IsEmpty) plus += it.plus * it.plus * 8 + (it.rarity == Rarity.Common ? 0 : 40);
+                int talents = 0;
+                foreach (int t in Data.talents) talents += t;
                 return Atk * 4 + Def * 3 + MaxHp / 2 + Data.level * 10 + Data.rebirth * 1000
-                       + skills * 60 + plus + WingPower * 60 + Data.petLevel * 25;
+                       + skills * 60 + plus + WingPower * 60 + Data.petLevel * 25 + talents * 80 + (Riding ? 300 * (Data.mountId + 1) : 0);
             }
         }
 
-        // The armour set glows from +7: the lowest enhance level among armour, helm and boots.
+        // The armour set glows from +7: the lowest enhance level among helm, armour, gloves, pants and boots.
         public int GlowPlus
         {
             get
             {
                 int min = int.MaxValue;
-                for (int s = 1; s < 4; s++)
+                foreach (var s in new[] { Slot.Armor, Slot.Helm, Slot.Boots, Slot.Gloves, Slot.Pants })
                 {
-                    var it = Data.equipped[s];
+                    var it = Data.equipped[(int)s];
                     if (it.IsEmpty) return 0;
                     min = Mathf.Min(min, it.plus);
                 }
@@ -131,9 +235,11 @@ namespace MuProto
             return why == null;
         }
 
-        int GearStat(Slot s)
+        int GearStat(Slot s) => GearAt((int)s);
+
+        int GearAt(int index)
         {
-            var it = Data.equipped[(int)s];
+            var it = Data.equipped[index];
             return it.IsEmpty || !CanEquip(it, out _) ? 0 : it.Stat;
         }
 
@@ -153,6 +259,7 @@ namespace MuProto
         {
             Instance = this;
             Data = SaveSystem.Load();
+            RecalcBonus();
             Hp = MaxHp;
             spawnPoint = transform.position;
         }
@@ -164,12 +271,14 @@ namespace MuProto
             aura = Aura.Attach(body, Class.BodyColor);
             aura.SetLevel(HasClass ? GlowPlus : 0);
             BuildWings();
+            BuildMount();
         }
 
         void BuildWings()
         {
             if (wings != null) Destroy(wings.gameObject);
             wings = MakeWings(transform, Data.wingTier, Data.wingLevel);
+            if (wings != null && Riding) wings.localPosition = new Vector3(0, 2.15f, -0.35f);
         }
 
         // Model per class (Resources/Models/DarkKnight, DarkWizard, Elf, or Player), else placeholder shapes.
@@ -367,6 +476,13 @@ namespace MuProto
 
         static Vector2 KeyboardInput()
         {
+            // Typing in chat or a name box must not walk the character.
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            if (es != null && es.currentSelectedGameObject != null)
+            {
+                var field = es.currentSelectedGameObject.GetComponent<UnityEngine.UI.InputField>();
+                if (field != null && field.isFocused) return Vector2.zero;
+            }
 #if ENABLE_INPUT_SYSTEM
             var k = UnityEngine.InputSystem.Keyboard.current;
             if (k == null) return Vector2.zero;
@@ -442,7 +558,7 @@ namespace MuProto
         // Melee hits land now; ranged ones fly as a projectile and land on arrival.
         void Deal(Monster m, float multiplier, Color color, bool ringOnHit)
         {
-            int dmg = RollDamage(Atk, multiplier, out bool crit);
+            int dmg = Roll(multiplier, out bool crit);
             if (Class.Ranged)
                 Projectile.Fire(transform.position + Vector3.up * 1.3f, m, dmg, crit, this, color, ringOnHit ? 1.2f : 0f);
             else
@@ -455,7 +571,7 @@ namespace MuProto
         // Another player: the hit is sent to their game, which applies their own DEF.
         void DealPvp(RemotePlayer rp, float multiplier, Color color, bool ringOnHit)
         {
-            int dmg = RollDamage(Atk, multiplier * PvpScale, out bool crit);
+            int dmg = Roll(multiplier * PvpScale, out bool crit);
             System.Action land = () =>
             {
                 if (rp == null) return;
@@ -579,7 +695,7 @@ namespace MuProto
             foreach (var m in Monster.All)
                 if (!m.IsDead && Flat(m.transform.position - center) <= radius) hits.Add(m);
             foreach (var m in hits)
-                m.TakeDamage(RollDamage(Atk, multiplier, out bool crit), crit, this);
+                m.TakeDamage(Roll(multiplier, out bool crit), crit, this);
             return hits.Count;
         }
 
@@ -621,6 +737,7 @@ namespace MuProto
             else
             {
                 Data.pkPoints++;
+                Data.pkKills++;
                 Data.pkClock = PkPointSeconds;
                 HUD.Message("You killed " + victimName + ". Your name is RED (PK " + Data.pkPoints + ")", 4f);
             }
@@ -647,10 +764,13 @@ namespace MuProto
         public void OnKill(Monster m)
         {
             Vector3 p = m.transform.position + Vector3.up * 2.6f;
-            int gold = m.GoldReward;
+            int gold = Mathf.RoundToInt(m.GoldReward * (1f + bonus.zen));
             Data.gold += gold;
-            FloatingText.Spawn(p, "+" + m.ExpReward + " EXP  +" + gold + "g", new Color(1f, 0.85f, 0.3f), 26);
-            AddExp(m.ExpReward);
+            int exp = Mathf.RoundToInt(m.ExpReward * Social.PartyExpBonus(transform.position));
+            FloatingText.Spawn(p, "+" + exp + " EXP  +" + gold + "g", new Color(1f, 0.85f, 0.3f), 26);
+            AddExp(exp);
+            Data.kills++;
+            if (bonus.lifeOnKill) Hp = Mathf.Min(MaxHp, Hp + MaxHp / 8);
 
             float lv = m.Level;
             if (Random.value < 0.3f) GiveItem(GameData.RollDrop(m.Level, Data, m.IsBoss ? 5f : 1f), p + Vector3.up);
@@ -660,6 +780,15 @@ namespace MuProto
             if (lv >= 20 && Random.value < 0.012f) Loot(ref Data.flames, "Condor Flame", new Color(1f, 0.45f, 0.15f), p, 2.8f);
             if (Random.value < 0.12f) Loot(ref Data.petFood, "Pet Food", new Color(1f, 0.6f, 0.8f), p, 3.2f);
             if (Random.value < 0.08f) Loot(ref Data.potions, "HP Potion", new Color(1f, 0.35f, 0.35f), p, 3.6f);
+            if (lv >= 10 && Random.value < 0.012f) Loot(ref Data.jewelChaos, "Jewel of Chaos", new Color(0.95f, 0.75f, 0.3f), p, 4.4f);
+            if (lv >= 10 && Random.value < 0.008f) Loot(ref Data.jewelLife, "Jewel of Life", new Color(0.4f, 0.9f, 1f), p, 4.8f);
+            if (lv >= 15 && Random.value < 0.03f)
+            {
+                var gem = (GemType)Random.Range(1, 5);
+                int glv = lv >= 80 ? 2 : 1;
+                Data.gemBag[GameData.GemIndex(gem, glv)]++;
+                FloatingText.Spawn(p + Vector3.up * 4f, "+1 " + gem + " Lv" + glv, new Color(0.5f, 0.9f, 1f), 24);
+            }
 
             if (Data.level >= GameData.MaxLevel && m.Level >= GameData.RebirthKillMinLevel) Data.rebirthKills++;
             Quests.OnKill(this, m);
@@ -791,8 +920,15 @@ namespace MuProto
         {
             var item = Data.bag[bagIndex];
             if (!CanEquip(item, out string why)) return why;
-            var current = Data.equipped[(int)item.slot];
-            Data.equipped[(int)item.slot] = item;
+            int idx = (int)item.slot;
+            if (item.slot == Slot.Ring)
+            {
+                var r1 = Data.equipped[(int)Slot.Ring];
+                var r2 = Data.equipped[GameData.Ring2Index];
+                idx = r1.IsEmpty ? (int)Slot.Ring : r2.IsEmpty ? GameData.Ring2Index : r1.Stat <= r2.Stat ? (int)Slot.Ring : GameData.Ring2Index;
+            }
+            var current = Data.equipped[idx];
+            Data.equipped[idx] = item;
             Data.bag.RemoveAt(bagIndex);
             if (!current.IsEmpty) Data.bag.Insert(bagIndex, current);
             Hp = Mathf.Min(Hp, MaxHp);
@@ -818,9 +954,9 @@ namespace MuProto
         }
 
         // Jewel of Bless for +1..+6 (always works), Jewel of Soul for +7 and up (can fail and drop a level).
-        public string Enhance(Slot slot)
+        public string Enhance(int index)
         {
-            var item = Data.equipped[(int)slot];
+            var item = Data.equipped[index];
             if (item.IsEmpty) return "Nothing equipped";
             if (!item.CanEnhance) return "Already +" + GameData.MaxPlus;
             bool soul = item.UsesSoul;
@@ -863,6 +999,141 @@ namespace MuProto
             Quests.Check(this);
             Commit();
             return step == Upgrades.WingStep.Level ? "Wings +" + Data.wingLevel : Class.Wings[Data.wingTier - 1] + "!";
+        }
+
+        // ---- Gems and sockets ----
+
+        public int GemCount(GemType t, int lv) => Data.gemBag[GameData.GemIndex(t, lv)];
+
+        public string SocketGem(int equipIndex, GemType t)
+        {
+            var it = Data.equipped[equipIndex];
+            if (it.IsEmpty || it.SocketCount == 0) return "This item has no sockets";
+            int slot = System.Array.IndexOf(it.sockets, 0);
+            if (slot < 0) return "All sockets are full";
+            for (int lv = 5; lv >= 1; lv--)
+            {
+                int i = GameData.GemIndex(t, lv);
+                if (Data.gemBag[i] <= 0) continue;
+                Data.gemBag[i]--;
+                it.sockets[slot] = (int)t * 10 + lv;
+                Commit();
+                return "Socketed " + t + " Lv" + lv;
+            }
+            return "No " + t + " gems";
+        }
+
+        public string ClearSockets(int equipIndex)
+        {
+            var it = Data.equipped[equipIndex];
+            if (it.SocketCount == 0) return "No sockets";
+            for (int i = 0; i < it.sockets.Length; i++) it.sockets[i] = 0;
+            Commit();
+            return "Gems removed (they break)";
+        }
+
+        // Three gems of a level make one of the next level.
+        public string CombineGems()
+        {
+            int made = 0;
+            foreach (GemType t in new[] { GemType.Ruby, GemType.Sapphire, GemType.Emerald, GemType.Topaz })
+                for (int lv = 1; lv < 5; lv++)
+                {
+                    int i = GameData.GemIndex(t, lv);
+                    while (Data.gemBag[i] >= 3)
+                    {
+                        Data.gemBag[i] -= 3;
+                        Data.gemBag[GameData.GemIndex(t, lv + 1)]++;
+                        made++;
+                    }
+                }
+            Commit();
+            return made > 0 ? "Combined " + made + " gems" : "Need 3 gems of the same kind and level";
+        }
+
+        // ---- Talents, mounts, titles, shop ----
+
+        public string AddTalent(int i)
+        {
+            if (Growth.TalentPoints(Data) - Growth.TalentSpent(Data) <= 0) return "No talent points (they come with Rebirth)";
+            if (Data.talents[i] >= Growth.MaxTalent) return "Already max";
+            Data.talents[i]++;
+            Commit();
+            return Growth.TalentNames[i] + " " + Data.talents[i] + "/" + Growth.MaxTalent;
+        }
+
+        public string ResetTalents()
+        {
+            if (Data.gold < Growth.TalentResetZen) return "Need " + Growth.TalentResetZen + " Zen";
+            Data.gold -= Growth.TalentResetZen;
+            for (int i = 0; i < Data.talents.Length; i++) Data.talents[i] = 0;
+            Commit();
+            return "Talents reset";
+        }
+
+        public string BuyMount(int i)
+        {
+            var m = Growth.Mounts[i];
+            if ((Data.mountsOwned & (1 << i)) != 0)
+            {
+                Data.mountId = Data.mountId == i ? -1 : i;
+                BuildMount();
+                Commit();
+                return Data.mountId == i ? "Riding " + m.Name : "On foot";
+            }
+            if (Data.rebirth < m.MinRebirth || (Data.rebirth == 0 && Data.level < m.MinLevel))
+                return m.MinRebirth > 0 ? "Needs " + m.MinRebirth + " Rebirth" : "Needs Lv " + m.MinLevel;
+            if (Data.gold < m.Zen || Data.diamonds < m.Diamonds) return "Not enough " + (m.Zen > 0 ? "Zen" : "Diamonds");
+            Data.gold -= m.Zen;
+            Data.diamonds -= m.Diamonds;
+            Data.mountsOwned |= 1 << i;
+            Data.mountId = i;
+            BuildMount();
+            Commit();
+            return "Got " + m.Name + "!";
+        }
+
+        public void ToggleRide()
+        {
+            if (Data.mountsOwned == 0) { HUD.Message("No mount yet. Get one in Growth > Mount", 2.5f); return; }
+            if (Data.mountId >= 0) Data.mountId = -1;
+            else for (int i = Growth.Mounts.Length - 1; i >= 0; i--) if ((Data.mountsOwned & (1 << i)) != 0) { Data.mountId = i; break; }
+            BuildMount();
+            Commit();
+        }
+
+        public string EquipTitle(int i)
+        {
+            var t = Growth.Titles[i];
+            if (!t.Unlocked(Data)) return "Locked: " + t.Requirement;
+            Data.titleId = Data.titleId == i ? -1 : i;
+            Commit();
+            return Data.titleId == i ? "Title: " + t.Name : "Title removed";
+        }
+
+        public string Buy(Growth.ShopItem item)
+        {
+            if (Data.gold < item.Zen) return "Need " + item.Zen + " Zen";
+            if (Data.diamonds < item.Diamonds) return "Need " + item.Diamonds + " Diamonds";
+            Data.gold -= item.Zen;
+            Data.diamonds -= item.Diamonds;
+            item.Give(this);
+            Commit();
+            return "Bought " + item.Name;
+        }
+
+        Transform mount;
+
+        void BuildMount()
+        {
+            if (mount != null) Destroy(mount.gameObject);
+            mount = null;
+            if (body != null) body.localPosition = Vector3.zero;
+            if (wings != null) wings.localPosition = new Vector3(0, 1.35f, -0.35f);
+            if (!Riding) return;
+            mount = Growth.MakeMount(transform, Data.mountId);
+            if (body != null) body.localPosition = Vector3.up * 0.8f;
+            if (wings != null) wings.localPosition = new Vector3(0, 2.15f, -0.35f);
         }
 
         public bool UpgradePet()
@@ -968,12 +1239,13 @@ namespace MuProto
             Data = GameData.NewSave();
             BuildBody();
             Hp = MaxHp;
-            Teleport(spawnPoint, FieldBounds);
+            Maps.Enter(this, 0, true);
             Commit();
         }
 
         public void Commit()
         {
+            RecalcBonus();
             dirty = true;
             Changed?.Invoke();
         }
@@ -992,7 +1264,7 @@ namespace MuProto
         {
             Hp = MaxHp;
             if (DungeonRun.Active != null) DungeonRun.Active.Leave();
-            Teleport(spawnPoint, FieldBounds);
+            Maps.ReturnToTown(this);
         }
 
         protected override Color DamageColor(bool crit) => new Color(1f, 0.3f, 0.3f);

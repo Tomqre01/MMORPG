@@ -41,7 +41,7 @@ namespace MuProto
             foreach (var s in spawners) if (s != null) Destroy(s.gameObject);
             foreach (var g in props) if (g != null) Destroy(g);
             var p = Player.Instance;
-            if (p != null && !p.IsDead) p.Teleport(Vector3.zero, Combatant.FieldBounds);
+            if (p != null && !p.IsDead) Maps.ReturnToTown(p);
             Active = null;
             Destroy(gameObject);
         }
@@ -172,7 +172,7 @@ namespace MuProto
                             ":  +" + exp + " EXP  +" + gold + "g  +" + bless + " Bless" + (soul > 0 ? "  +" + soul + " Soul" : ""), 5f);
             }
             else HUD.Message("Devil Square failed", 3f);
-            if (won) Quests.OnEvent(p, QuestKind.DevilSquare);
+            if (won && p != null) { p.Data.dsClears++; Quests.OnEvent(p, QuestKind.DevilSquare); }
             Cleanup();
         }
     }
@@ -335,6 +335,7 @@ namespace MuProto
                 p.AddMaterials(gold, exp, 3, soul, 3, flames);
                 HUD.Message("Blood Castle cleared!  +" + exp + " EXP  +" + gold + "g  +3 Bless  +" + soul + " Soul  +3 Feathers" +
                             (flames > 0 ? "  +1 Condor Flame" : ""), 5f);
+                p.Data.bcClears++;
                 Quests.OnEvent(p, QuestKind.BloodCastle);
             }
             else HUD.Message(TimeLeft <= 0 ? "Time's up! Blood Castle failed" : "Blood Castle failed", 3f);

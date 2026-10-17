@@ -80,6 +80,41 @@ namespace MuProto
             finally { pushing = false; }
         }
 
+        // ---- Ranking: each player's summary is a public storage object; anyone can list them. ----
+
+        [Serializable]
+        public class RankEntry
+        {
+            public string n, c;
+            public int lv, rb, cp, atk, def, hp, ap;
+        }
+
+        public static async void PushRank(RankEntry e)
+        {
+            if (!IsOnline) return;
+            try
+            {
+                await Client.WriteStorageObjectsAsync(Session, new IApiWriteStorageObject[]
+                {
+                    new WriteStorageObject { Collection = "rank", Key = "cp", Value = JsonUtility.ToJson(e), PermissionRead = 2, PermissionWrite = 1 }
+                });
+            }
+            catch (Exception ex) { Debug.LogWarning("[Online] Rank upload failed: " + ex.Message); }
+        }
+
+        public static async Task<System.Collections.Generic.List<RankEntry>> ListRanks()
+        {
+            var list = await Client.ListStorageObjectsAsync(Session, "rank", 100);
+            return list.Objects.Select(o => JsonUtility.FromJson<RankEntry>(o.Value)).Where(x => x != null)
+                       .OrderByDescending(x => x.cp).ToList();
+        }
+
+        public static async Task SetDisplayName(string name)
+        {
+            if (!IsOnline) return;
+            await Client.UpdateAccountAsync(Session, null, name);
+        }
+
         static string DeviceId()
         {
             string id = SystemInfo.deviceUniqueIdentifier;
