@@ -132,13 +132,17 @@ namespace MuProto
         };
 
         const float FadeTime = 0.15f;
+        const int Slots = 4; // clips that can be fading at once
 
         readonly AnimationClip[] clips = new AnimationClip[5];
         PlayableGraph graph;
         AnimationMixerPlayable mixer;
-        int active;
+        // Mixer weights always add up to 1. If they don't, Unity blends the rig toward its default
+        // pose and the model flickers for a frame (this happened when an attack or hit started
+        // while the previous clip was still fading out).
+        readonly float[] weights = new float[Slots];
+        int active = -1;
         AnimationClipPlayable playing;
-        float fade = 1f;
         Anim current = (Anim)(-1);
 
         // procedural mode
@@ -170,7 +174,7 @@ namespace MuProto
             animator.applyRootMotion = false;
             animator.runtimeAnimatorController = null; // the playable graph below drives the model instead
             ma.graph = PlayableGraph.Create(model.name);
-            ma.mixer = AnimationMixerPlayable.Create(ma.graph, 2);
+            ma.mixer = AnimationMixerPlayable.Create(ma.graph, Slots);
             AnimationPlayableOutput.Create(ma.graph, "Anim", animator).SetSourcePlayable(ma.mixer);
             ma.graph.Play();
             ma.Play(Anim.Idle);
@@ -215,20 +219,43 @@ namespace MuProto
             var clip = clips[(int)a];
             if (clip == null) return;
 
-            int next = 1 - active;
-            var old = mixer.GetInput(next);
+            // Use a free slot; if every slot is still fading, reuse the faintest one and hand its
+            // weight to the clip playing now so nothing ever drops out of the blend.
+            int slot = -1;
+            for (int i = 0; i < Slots && slot < 0; i++)
+                if (i != active && weights[i] <= 0f) slot = i;
+            if (slot < 0)
+            {
+                float min = float.MaxValue;
+                for (int i = 0; i < Slots; i++)
+                    if (i != active && weights[i] < min) { min = weights[i]; slot = i; }
+                weights[active] += weights[slot];
+                weights[slot] = 0f;
+            }
+            var old = mixer.GetInput(slot);
             if (old.IsValid())
             {
-                graph.Disconnect(mixer, next);
+                graph.Disconnect(mixer, slot);
                 old.Destroy();
             }
             var p = AnimationClipPlayable.Create(graph, clip);
             if (fitInto > 0 && clip.length > fitInto) p.SetSpeed(clip.length / fitInto);
-            graph.Connect(p, 0, mixer, next);
+            graph.Connect(p, 0, mixer, slot);
+            bool first = active < 0;
+            active = slot;
             playing = p;
-            active = next;
             current = a;
-            fade = 0f;
+            if (first) weights[slot] = 1f; // no fade-in from nothing on the very first clip
+            Rebalance();
+        }
+
+        void Rebalance()
+        {
+            float others = 0f;
+            for (int i = 0; i < Slots; i++)
+                if (i != active) others += weights[i];
+            weights[active] = Mathf.Max(0f, 1f - others);
+            for (int i = 0; i < Slots; i++) mixer.SetInputWeight(i, weights[i]);
         }
 
         void Update()
@@ -241,9 +268,10 @@ namespace MuProto
                 float len = clips[(int)current].length;
                 if (len > 0 && playing.GetTime() > len) playing.SetTime(playing.GetTime() % len);
             }
-            fade = Mathf.Min(1f, fade + Time.deltaTime / FadeTime);
-            mixer.SetInputWeight(active, fade);
-            mixer.SetInputWeight(1 - active, 1f - fade);
+            float step = Time.deltaTime / FadeTime;
+            for (int i = 0; i < Slots; i++)
+                if (i != active) weights[i] = Mathf.Max(0f, weights[i] - step);
+            Rebalance();
         }
 
         void UpdateProcedural()
