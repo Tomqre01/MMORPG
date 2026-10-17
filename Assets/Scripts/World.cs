@@ -13,17 +13,29 @@ namespace MuProto
         public float Scale;
         public Color Color;
 
+        public Rect Bounds = Combatant.FieldBounds;
+        public event System.Action<Monster> Died;
+
         int alive;
         float timer;
 
-        public static MonsterSpawner Create(string monsterName, int level, Vector3 center, float radius, int count, Color color, float scale)
+        public static MonsterSpawner Create(string monsterName, int level, Vector3 center, float radius, int count, Color color, float scale, bool showZone = true)
         {
-            var zone = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            Destroy(zone.GetComponent<Collider>());
+            GameObject zone;
+            if (showZone)
+            {
+                zone = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                Destroy(zone.GetComponent<Collider>());
+                zone.transform.position = new Vector3(center.x, 0.01f, center.z);
+                zone.transform.localScale = new Vector3(radius * 2.4f, 0.01f, radius * 2.4f);
+                zone.GetComponent<Renderer>().material.color = Color.Lerp(color, new Color(0.2f, 0.25f, 0.15f), 0.7f);
+            }
+            else
+            {
+                zone = new GameObject();
+                zone.transform.position = center;
+            }
             zone.name = monsterName + " Zone";
-            zone.transform.position = new Vector3(center.x, 0.01f, center.z);
-            zone.transform.localScale = new Vector3(radius * 2.4f, 0.01f, radius * 2.4f);
-            zone.GetComponent<Renderer>().material.color = Color.Lerp(color, new Color(0.2f, 0.25f, 0.15f), 0.7f);
 
             var s = zone.AddComponent<MonsterSpawner>();
             s.MonsterName = monsterName;
@@ -49,14 +61,20 @@ namespace MuProto
             Spawn();
         }
 
-        void Spawn()
+        public Monster Spawn()
         {
             Vector2 r = Random.insideUnitCircle * Radius;
-            Monster.Create(this, new Vector3(transform.position.x + r.x, 0, transform.position.z + r.y));
+            var m = Monster.Create(this, new Vector3(transform.position.x + r.x, 0, transform.position.z + r.y));
+            m.Bounds = Bounds;
             alive++;
+            return m;
         }
 
-        public void NotifyDeath() => alive--;
+        public void NotifyDeath(Monster m)
+        {
+            alive--;
+            Died?.Invoke(m);
+        }
     }
 
     public class CameraFollow : MonoBehaviour

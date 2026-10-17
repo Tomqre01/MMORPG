@@ -13,8 +13,10 @@ namespace MuProto
         const float AttackInterval = 1.2f;
 
         public int Level { get; private set; }
-        public int ExpReward => 8 + Level * 6;
-        public int GoldReward => Random.Range(5 + Level * 2, 8 + Level * 4);
+        public bool IsBoss { get; private set; }
+        int RewardMul => IsBoss ? 10 : 1;
+        public int ExpReward => (8 + Level * 6) * RewardMul;
+        public int GoldReward => Random.Range(5 + Level * 2, 8 + Level * 4) * RewardMul;
 
         int maxHp, atk, def;
         public override int MaxHp => maxHp;
@@ -57,6 +59,15 @@ namespace MuProto
             m.wanderTarget = position;
             m.BuildHpBar(model != null ? s * 1.4f + 0.4f : s + 0.5f);
             return m;
+        }
+
+        // Dungeon boss: much tougher, hits harder, and pays out ten times the rewards.
+        public void MakeBoss()
+        {
+            IsBoss = true;
+            maxHp *= 12;
+            atk = Mathf.RoundToInt(atk * 1.5f);
+            Hp = maxHp;
         }
 
         void BuildHpBar(float height)
@@ -155,7 +166,7 @@ namespace MuProto
         protected override void Die(Combatant killer)
         {
             if (Player.Instance != null) Player.Instance.OnKill(this);
-            spawner.NotifyDeath();
+            spawner.NotifyDeath(this);
             hpBar.gameObject.SetActive(false);
             // Leave the body briefly so a death animation can play.
             Destroy(gameObject, anim != null ? 1.5f : 0f);

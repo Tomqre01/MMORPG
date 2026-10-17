@@ -7,12 +7,7 @@ namespace MuProto
     {
         public static Player Instance { get; private set; }
 
-        public static readonly string[] SkillNames = { "Slash", "Whirl", "Nova" };
-        public static readonly float[] SkillCooldowns = { 3f, 6f, 12f };
-
         const float MoveSpeed = 6f;
-        const float AttackRange = 2.2f;
-        const float AttackInterval = 0.6f;
         const float AggroRange = 14f;
         const float RespawnDelay = 3f;
 
@@ -24,13 +19,18 @@ namespace MuProto
         readonly float[] skillCd = new float[3];
         Monster target;
         Vector3 spawnPoint;
+        Transform body, wings;
         float attackTimer, respawnTimer, lastHitTime, regenAcc, saveTimer;
         bool dirty;
 
-        public override int Atk => 10 + Data.level * 3 + EquipStat(Slot.Weapon);
-        public override int Def => Data.level + EquipStat(Slot.Armor) + EquipStat(Slot.Helm) + EquipStat(Slot.Boots);
-        public override int MaxHp => 100 + Data.level * 25 + Def * 3;
-        public int CombatPower => Atk * 5 + Def * 4 + MaxHp / 2;
+        public bool HasClass => !string.IsNullOrEmpty(Data.classId);
+        public ClassDef Class => Classes.Get(Data.classId);
+        public Monster Target => target;
+
+        public override int Atk => Mathf.RoundToInt((10 + Data.level * 3 + EquipStat(Slot.Weapon)) * Class.AtkMul) + Data.wingsLevel * 4;
+        public override int Def => Mathf.RoundToInt((Data.level + EquipStat(Slot.Armor) + EquipStat(Slot.Helm) + EquipStat(Slot.Boots)) * Class.DefMul) + Data.wingsLevel * 2;
+        public override int MaxHp => Mathf.RoundToInt((100 + Data.level * 25 + Def * 3) * Class.HpMul) + Data.wingsLevel * 30;
+        public int CombatPower => Atk * 5 + Def * 4 + MaxHp / 2 + Data.petLevel * 25;
         public float RespawnIn => respawnTimer;
 
         int EquipStat(Slot s)
@@ -43,29 +43,10 @@ namespace MuProto
         {
             var root = new GameObject("Player");
             root.transform.position = position;
-
-            var model = ModelLibrary.Spawn("Player", root.transform, 1.9f, out var animator);
-            if (model != null)
-            {
-                var p = root.AddComponent<Player>();
-                p.anim = animator;
-                return p;
-            }
-
-            var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            Destroy(body.GetComponent<Collider>());
-            body.transform.SetParent(root.transform, false);
-            body.transform.localPosition = new Vector3(0, 1f, 0);
-            body.GetComponent<Renderer>().material.color = new Color(0.25f, 0.45f, 0.95f);
-
-            var sword = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            Destroy(sword.GetComponent<Collider>());
-            sword.transform.SetParent(root.transform, false);
-            sword.transform.localPosition = new Vector3(0.55f, 1.1f, 0.45f);
-            sword.transform.localScale = new Vector3(0.12f, 0.12f, 1.3f);
-            sword.GetComponent<Renderer>().material.color = new Color(0.85f, 0.85f, 0.9f);
-
-            return root.AddComponent<Player>();
+            var p = root.AddComponent<Player>();
+            p.BuildBody();
+            Pet.Create(p);
+            return p;
         }
 
         void Awake()
@@ -76,11 +57,75 @@ namespace MuProto
             spawnPoint = transform.position;
         }
 
+        // Model per class (Resources/Models/Knight, Mage, Archer, or Player), else placeholder shapes.
+        void BuildBody()
+        {
+            if (body != null) Destroy(body.gameObject);
+            body = new GameObject("Body").transform;
+            body.SetParent(transform, false);
+            anim = null;
+
+            var cls = Class;
+            var model = ModelLibrary.Spawn(cls.Id, body, 1.9f, out var animator)
+                        ?? ModelLibrary.Spawn("Player", body, 1.9f, out animator);
+            if (model != null)
+                anim = animator;
+            else
+            {
+                Part(PrimitiveType.Capsule, new Vector3(0, 1f, 0), Vector3.one, cls.BodyColor);
+                if (cls.Id == "Mage")
+                {
+                    Part(PrimitiveType.Cylinder, new Vector3(0.55f, 1.1f, 0.2f), new Vector3(0.08f, 1f, 0.08f), new Color(0.45f, 0.3f, 0.15f));
+                    Part(PrimitiveType.Sphere, new Vector3(0.55f, 2.15f, 0.2f), Vector3.one * 0.25f, new Color(0.4f, 0.8f, 1f));
+                }
+                else if (cls.Id == "Archer")
+                    Part(PrimitiveType.Cube, new Vector3(0.5f, 1.1f, 0.35f), new Vector3(0.06f, 1.3f, 0.12f), new Color(0.5f, 0.32f, 0.15f));
+                else
+                    Part(PrimitiveType.Cube, new Vector3(0.55f, 1.1f, 0.45f), new Vector3(0.12f, 0.12f, 1.3f), new Color(0.85f, 0.85f, 0.9f));
+            }
+            BuildWings();
+        }
+
+        void Part(PrimitiveType type, Vector3 pos, Vector3 scale, Color color)
+        {
+            var go = GameObject.CreatePrimitive(type);
+            Destroy(go.GetComponent<Collider>());
+            go.transform.SetParent(body, false);
+            go.transform.localPosition = pos;
+            go.transform.localScale = scale;
+            go.GetComponent<Renderer>().material.color = color;
+        }
+
+        // Two blades behind the back that grow and change colour every 10 levels.
+        void BuildWings()
+        {
+            if (wings != null) Destroy(wings.gameObject);
+            wings = null;
+            int lv = Data.wingsLevel;
+            if (lv <= 0) return;
+            wings = new GameObject("Wings").transform;
+            wings.SetParent(transform, false);
+            wings.localPosition = new Vector3(0, 1.35f, -0.35f);
+            float size = 0.8f + Mathf.Min(lv, 50) * 0.02f;
+            var color = Upgrades.WingColor(lv);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var w = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Destroy(w.GetComponent<Collider>());
+                w.transform.SetParent(wings, false);
+                w.transform.localPosition = new Vector3(side * 0.55f * size, 0.2f, -0.1f);
+                w.transform.localRotation = Quaternion.Euler(0, side * 25f, side * -30f);
+                w.transform.localScale = new Vector3(1.1f * size, 0.6f * size, 0.04f);
+                w.GetComponent<Renderer>().material.color = color;
+            }
+        }
+
         void Update()
         {
             float dt = Time.deltaTime;
             saveTimer -= dt;
             if (dirty && saveTimer <= 0) Flush();
+            if (!HasClass) return;
 
             if (IsDead)
             {
@@ -108,8 +153,9 @@ namespace MuProto
 
             if (target == null || target.IsDead) return;
 
+            float range = Class.AttackRange;
             Vector3 toTarget = target.transform.position - transform.position;
-            if (FlatDistance(target) > AttackRange)
+            if (FlatDistance(target) > range)
             {
                 if (AutoBattle) Step(toTarget, MoveSpeed);
                 else target = null;
@@ -148,69 +194,106 @@ namespace MuProto
 #endif
         }
 
-        Monster FindNearest(float maxDistance)
+        Monster FindNearest(float maxDistance) => FindNearest(transform.position, maxDistance);
+
+        static Monster FindNearest(Vector3 from, float maxDistance)
         {
             Monster best = null;
             float bestDist = maxDistance;
             foreach (var m in Monster.All)
             {
                 if (m.IsDead) continue;
-                float d = FlatDistance(m);
+                float d = Flat(m.transform.position - from);
                 if (d < bestDist) { bestDist = d; best = m; }
             }
             return best;
         }
 
+        static float Flat(Vector3 v) { v.y = 0; return v.magnitude; }
+
+        Monster TargetWithin(float range) =>
+            target != null && !target.IsDead && FlatDistance(target) <= range ? target : FindNearest(range);
+
         // Called by the Attack button: lock on to the nearest monster and keep hitting it.
         public void AttackPressed()
         {
-            if (IsDead) return;
-            if (target == null || target.IsDead || FlatDistance(target) > AttackRange)
-                target = FindNearest(AttackRange + 1.5f);
+            if (IsDead || !HasClass) return;
+            target = TargetWithin(Class.AttackRange + 1.5f);
             if (target != null) BasicAttack();
         }
 
         void BasicAttack()
         {
-            if (attackTimer > 0 || target == null || target.IsDead || FlatDistance(target) > AttackRange + 1.5f) return;
-            attackTimer = AttackInterval;
-            PlayAction(ModelAnimator.Anim.Attack, AttackInterval * 0.9f);
-            target.TakeDamage(RollDamage(Atk, 1f, out bool crit), crit, this);
+            if (attackTimer > 0 || target == null || target.IsDead || FlatDistance(target) > Class.AttackRange + 1.5f) return;
+            attackTimer = Class.AttackInterval;
+            PlayAction(ModelAnimator.Anim.Attack, Class.AttackInterval * 0.9f);
+            Deal(target, 1f, Class.BodyColor, false);
         }
 
-        public float SkillCooldownRatio(int i) => skillCd[i] / SkillCooldowns[i];
+        // Melee hits land now; ranged ones fly as a projectile and land on arrival.
+        void Deal(Monster m, float multiplier, Color color, bool ringOnHit)
+        {
+            int dmg = RollDamage(Atk, multiplier, out bool crit);
+            if (Class.Ranged)
+                Projectile.Fire(transform.position + Vector3.up * 1.3f, m, dmg, crit, this, color, ringOnHit ? 1.2f : 0f);
+            else
+            {
+                m.TakeDamage(dmg, crit, this);
+                if (ringOnHit) Effect.Ring(m.transform.position, 1.2f, color);
+            }
+        }
+
+        public float SkillCooldownRatio(int i) => skillCd[i] / Class.Skills[i].Cooldown;
 
         public bool UseSkill(int i)
         {
-            if (IsDead || skillCd[i] > 0) return false;
-            switch (i)
+            if (IsDead || !HasClass || skillCd[i] > 0) return false;
+            var sk = Class.Skills[i];
+            switch (sk.Kind)
             {
-                case 0:
-                    var t = target != null && !target.IsDead && FlatDistance(target) <= AttackRange + 1f ? target : FindNearest(AttackRange + 1f);
+                case SkillKind.Single:
+                {
+                    var t = TargetWithin(sk.Range);
                     if (t == null) return false;
                     target = t;
-                    t.TakeDamage(RollDamage(Atk, 2.5f, out bool crit), crit, this);
-                    Effect.Ring(t.transform.position, 1.2f, new Color(1f, 0.6f, 0.2f));
+                    Deal(t, sk.Multiplier, sk.Color, true);
                     break;
-                case 1:
-                    if (!HitArea(3.5f, 1.6f)) return false;
-                    Effect.Ring(transform.position, 3.5f, new Color(0.3f, 0.9f, 1f));
+                }
+                case SkillKind.SelfArea:
+                    if (!HitArea(transform.position, sk.Radius, sk.Multiplier)) return false;
+                    Effect.Ring(transform.position, sk.Radius, sk.Color);
                     break;
-                default:
-                    if (!HitArea(6f, 3f)) return false;
-                    Effect.Ring(transform.position, 6f, new Color(0.7f, 0.4f, 1f));
+                case SkillKind.TargetArea:
+                {
+                    var t = TargetWithin(sk.Range);
+                    if (t == null) return false;
+                    target = t;
+                    Vector3 c = t.transform.position;
+                    HitArea(c, sk.Radius, sk.Multiplier);
+                    Effect.Ring(c, sk.Radius, sk.Color);
                     break;
+                }
+                case SkillKind.Multi:
+                {
+                    var hits = new List<Monster>();
+                    foreach (var m in Monster.All)
+                        if (!m.IsDead && FlatDistance(m) <= sk.Range) hits.Add(m);
+                    if (hits.Count == 0) return false;
+                    hits.Sort((a, b) => FlatDistance(a).CompareTo(FlatDistance(b)));
+                    for (int n = 0; n < hits.Count && n < (int)sk.Radius; n++) Deal(hits[n], sk.Multiplier, sk.Color, false);
+                    break;
+                }
             }
-            skillCd[i] = SkillCooldowns[i];
+            skillCd[i] = sk.Cooldown;
             PlayAction(ModelAnimator.Anim.Attack, 0.5f);
             return true;
         }
 
-        bool HitArea(float radius, float multiplier)
+        bool HitArea(Vector3 center, float radius, float multiplier)
         {
             var hits = new List<Monster>();
             foreach (var m in Monster.All)
-                if (!m.IsDead && FlatDistance(m) <= radius) hits.Add(m);
+                if (!m.IsDead && Flat(m.transform.position - center) <= radius) hits.Add(m);
             foreach (var m in hits)
                 m.TakeDamage(RollDamage(Atk, multiplier, out bool crit), crit, this);
             return hits.Count > 0;
@@ -224,21 +307,31 @@ namespace MuProto
             Data.gold += gold;
             FloatingText.Spawn(p, "+" + m.ExpReward + " EXP  +" + gold + "g", new Color(1f, 0.85f, 0.3f), 26);
 
-            if (Random.value < 0.35f)
-            {
-                var item = GameData.RollDrop(m.Level);
-                if (Data.bag.Count >= GameData.BagSize)
-                {
-                    Data.gold += item.SellPrice;
-                    FloatingText.Spawn(p + Vector3.up, "Bag full: sold " + item.name, Color.gray, 24);
-                }
-                else
-                {
-                    Data.bag.Add(item);
-                    FloatingText.Spawn(p + Vector3.up, item.name, GameData.RarityColor(item.rarity), 30);
-                }
-            }
+            if (Random.value < 0.35f) GiveItem(GameData.RollDrop(m.Level), p + Vector3.up);
+            if (Random.value < 0.15f) { Data.feathers++; FloatingText.Spawn(p + Vector3.up * 1.6f, "+1 Feather", Upgrades.WingColor(11), 24); }
+            if (Random.value < 0.15f) { Data.petFood++; FloatingText.Spawn(p + Vector3.up * 2.2f, "+1 Pet Food", new Color(1f, 0.6f, 0.8f), 24); }
 
+            AddExp(0);
+            Commit();
+        }
+
+        public void GiveItem(Item item, Vector3 textPos)
+        {
+            if (Data.bag.Count >= GameData.BagSize)
+            {
+                Data.gold += item.SellPrice;
+                FloatingText.Spawn(textPos, "Bag full: sold " + item.name, Color.gray, 24);
+            }
+            else
+            {
+                Data.bag.Add(item);
+                FloatingText.Spawn(textPos, item.name, GameData.RarityColor(item.rarity), 30);
+            }
+        }
+
+        public void AddExp(int amount)
+        {
+            Data.exp += amount;
             while (Data.exp >= GameData.ExpToNext(Data.level))
             {
                 Data.exp -= GameData.ExpToNext(Data.level);
@@ -246,6 +339,13 @@ namespace MuProto
                 Hp = MaxHp;
                 FloatingText.Spawn(transform.position + Vector3.up * 3f, "LEVEL UP! " + Data.level, new Color(0.4f, 1f, 0.4f), 52);
             }
+        }
+
+        public void ChooseClass(string id)
+        {
+            Data.classId = id;
+            BuildBody();
+            Hp = MaxHp;
             Commit();
         }
 
@@ -286,16 +386,78 @@ namespace MuProto
             return success;
         }
 
+        public bool UpgradeWings()
+        {
+            int lv = Data.wingsLevel;
+            if (lv >= Upgrades.MaxWings || Data.feathers < Upgrades.WingFeathers(lv) || Data.gold < Upgrades.WingGold(lv)) return false;
+            Data.feathers -= Upgrades.WingFeathers(lv);
+            Data.gold -= Upgrades.WingGold(lv);
+            Data.wingsLevel++;
+            BuildWings();
+            Commit();
+            return true;
+        }
+
+        public bool UpgradePet()
+        {
+            int lv = Data.petLevel;
+            if (lv >= Upgrades.MaxPet) return false;
+            if (lv == 0)
+            {
+                if (Data.gold < Upgrades.PetAdoptCost) return false;
+                Data.gold -= Upgrades.PetAdoptCost;
+            }
+            else
+            {
+                if (Data.petFood < Upgrades.PetFood(lv) || Data.gold < Upgrades.PetGold(lv)) return false;
+                Data.petFood -= Upgrades.PetFood(lv);
+                Data.gold -= Upgrades.PetGold(lv);
+            }
+            Data.petLevel++;
+            Commit();
+            return true;
+        }
+
+        static string Today => System.DateTime.Now.ToString("yyyy-MM-dd");
+
+        public int DungeonRunsLeft => Upgrades.DungeonRunsPerDay - (Data.dungeonDate == Today ? Data.dungeonRuns : 0);
+
+        public bool UseDungeonRun()
+        {
+            if (DungeonRunsLeft <= 0) return false;
+            if (Data.dungeonDate != Today) { Data.dungeonDate = Today; Data.dungeonRuns = 0; }
+            Data.dungeonRuns++;
+            Commit();
+            return true;
+        }
+
+        public void AddMaterials(int gold, int feathers, int petFood)
+        {
+            Data.gold += gold;
+            Data.feathers += feathers;
+            Data.petFood += petFood;
+            Commit();
+        }
+
+        public void Teleport(Vector3 position, Rect bounds)
+        {
+            transform.position = position;
+            Bounds = bounds;
+            target = null;
+            if (Pet.Instance != null) Pet.Instance.SnapToOwner();
+        }
+
         public void ResetSave()
         {
             SaveSystem.Delete();
             Data = GameData.NewSave();
+            BuildBody();
             Hp = MaxHp;
-            transform.position = spawnPoint;
+            Teleport(spawnPoint, FieldBounds);
             Commit();
         }
 
-        void Commit()
+        public void Commit()
         {
             dirty = true;
             Changed?.Invoke();
@@ -313,9 +475,8 @@ namespace MuProto
 
         void Respawn()
         {
-            transform.position = spawnPoint;
             Hp = MaxHp;
-            target = null;
+            Teleport(spawnPoint, FieldBounds);
         }
 
         protected override Color DamageColor(bool crit) => new Color(1f, 0.3f, 0.3f);
