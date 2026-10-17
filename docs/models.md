@@ -57,3 +57,17 @@
 
 ## ถ้ามีอะไรแปลกๆ
 เช่น โมเดลนอนราบ หันผิดทาง หรือไม่ขยับ ให้แคปหน้าจอพร้อมบอกชื่อแพ็กมาในเธรด จะแก้ให้ตรงกับแพ็กนั้น
+
+## ใส่กระดูกและท่าทางจริงให้ Goblin, Orc, Golem ด้วย Blender
+โมเดลที่มากับโปรเจกต์ขยับได้อยู่แล้วแบบง่าย ถ้าอยากให้แขนขาขยับจริง (เดินสลับขา ง้างแขนตี ล้มลงตอนตาย) ใช้สคริปต์ Blender ที่เตรียมไว้
+
+1. ติดตั้ง **Blender 4.2 ขึ้นไป** จาก [blender.org/download](https://www.blender.org/download/) (ฟรี)
+2. เปิด Command Prompt แล้วรันคำสั่งนี้ (แก้ path ให้ตรงกับเครื่อง)
+   ```
+   "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe" -b -P "C:\path\to\MMORPG\Tools\Blender\rig_monsters.py" -- "C:\path\to\โปรเจกต์Unity\Assets\Resources\Models"
+   ```
+   หรือเปิด Blender → แท็บ **Scripting** → **Open** ไฟล์ `rig_monsters.py` → ใส่ path โฟลเดอร์ Models ในบรรทัด `MODELS_DIR = r""` → กด **Run Script** (ปุ่ม ▶)
+3. สคริปต์จะสร้างไฟล์ `Goblin_Rigged.fbx`, `Orc_Rigged.fbx`, `Golem_Rigged.fbx` ไว้ในโฟลเดอร์ของแต่ละตัว พร้อมท่า Idle, Walk, Attack, Hit, Die
+4. กลับมาที่ Unity รอ import เสร็จ แล้วกด Play เกมจะเลือกไฟล์ที่มีกระดูกให้เอง
+
+จะแก้แค่ตัวเดียวก็ได้ ใส่ชื่อในบรรทัด `ONLY = ["Orc"]`

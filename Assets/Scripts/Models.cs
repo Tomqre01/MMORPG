@@ -58,7 +58,7 @@ namespace MuProto
                 model.transform.position += Vector3.up * (parent.position.y - b.min.y);
             }
 
-            animator = ModelAnimator.Attach(model, procedural);
+            animator = ModelAnimator.Attach(model, procedural, name);
             return model;
         }
 
@@ -133,6 +133,7 @@ namespace MuProto
         PlayableGraph graph;
         AnimationMixerPlayable mixer;
         int active;
+        AnimationClipPlayable playing;
         float fade = 1f;
         Anim current = (Anim)(-1);
 
@@ -142,11 +143,14 @@ namespace MuProto
         Quaternion baseRot;
         float height, phase, actionStart, actionLen;
 
-        public static ModelAnimator Attach(GameObject model, bool allowProcedural = true)
+        // slot: the Resources/Models name, used to find clips inside a rigged FBX that has no Animator Controller.
+        public static ModelAnimator Attach(GameObject model, bool allowProcedural = true, string slot = null)
         {
             var animator = model.GetComponentInChildren<Animator>();
             var all = animator != null && animator.runtimeAnimatorController != null
                 ? animator.runtimeAnimatorController.animationClips : null;
+            if ((all == null || all.Length == 0) && animator != null && slot != null)
+                all = System.Array.FindAll(Resources.LoadAll<AnimationClip>("Models/" + slot), c => !c.name.StartsWith("__preview__"));
             if (all == null || all.Length == 0)
                 return allowProcedural ? AttachProcedural(model) : null;
 
@@ -214,6 +218,7 @@ namespace MuProto
             var p = AnimationClipPlayable.Create(graph, clip);
             if (fitInto > 0 && clip.length > fitInto) p.SetSpeed(clip.length / fitInto);
             graph.Connect(p, 0, mixer, next);
+            playing = p;
             active = next;
             current = a;
             fade = 0f;
@@ -223,6 +228,12 @@ namespace MuProto
         {
             if (procedural) { UpdateProcedural(); return; }
             if (!graph.IsValid()) return;
+            // Idle and Move loop even when the clip was imported without Loop Time.
+            if ((current == Anim.Idle || current == Anim.Move) && playing.IsValid())
+            {
+                float len = clips[(int)current].length;
+                if (len > 0 && playing.GetTime() > len) playing.SetTime(playing.GetTime() % len);
+            }
             fade = Mathf.Min(1f, fade + Time.deltaTime / FadeTime);
             mixer.SetInputWeight(active, fade);
             mixer.SetInputWeight(1 - active, 1f - fade);
