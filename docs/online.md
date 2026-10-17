@@ -47,6 +47,9 @@
 
 ถ้าเน็ตหลุด เกมจะลองต่อใหม่เองทุก 5 วินาที
 
+เกมยังทำงานต่อแม้หน้าต่างไม่ได้โฟกัส (`Application.runInBackground`) ไม่งั้นตอนคลิกไปที่ MuMu ตัว Unity จะหยุดรับข้อมูลและไม่เห็นอีกคน
+ใน Console ของ Unity จะมี log `[Online] Joined world match ...` และ `[Online] Player appeared: ...` ไว้เช็ก
+
 ## หมายเหตุ
 - รหัส `defaultkey`, `localdb`, `admin/password` ใช้แค่ตอนพัฒนาบนคอมตัวเอง ก่อนเปิดให้คนอื่นเล่นต้องเปลี่ยนทั้งหมด
 - โค้ดฝั่งเกมอยู่ที่ `Assets/Scripts/Online.cs` ตัว SDK ของ Nakama อยู่ที่ `Assets/Plugins/Nakama` (Apache 2.0)
