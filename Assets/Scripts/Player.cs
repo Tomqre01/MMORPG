@@ -57,54 +57,60 @@ namespace MuProto
             spawnPoint = transform.position;
         }
 
-        // Model per class (Resources/Models/Knight, Mage, Archer, or Player), else placeholder shapes.
         void BuildBody()
         {
             if (body != null) Destroy(body.gameObject);
-            body = new GameObject("Body").transform;
-            body.SetParent(transform, false);
-            anim = null;
-
-            var cls = Class;
-            var model = ModelLibrary.Spawn(cls.Id, body, 1.9f, out var animator)
-                        ?? ModelLibrary.Spawn("Player", body, 1.9f, out animator);
-            if (model != null)
-                anim = animator;
-            else
-            {
-                Part(PrimitiveType.Capsule, new Vector3(0, 1f, 0), Vector3.one, cls.BodyColor);
-                if (cls.Id == "Mage")
-                {
-                    Part(PrimitiveType.Cylinder, new Vector3(0.55f, 1.1f, 0.2f), new Vector3(0.08f, 1f, 0.08f), new Color(0.45f, 0.3f, 0.15f));
-                    Part(PrimitiveType.Sphere, new Vector3(0.55f, 2.15f, 0.2f), Vector3.one * 0.25f, new Color(0.4f, 0.8f, 1f));
-                }
-                else if (cls.Id == "Archer")
-                    Part(PrimitiveType.Cube, new Vector3(0.5f, 1.1f, 0.35f), new Vector3(0.06f, 1.3f, 0.12f), new Color(0.5f, 0.32f, 0.15f));
-                else
-                    Part(PrimitiveType.Cube, new Vector3(0.55f, 1.1f, 0.45f), new Vector3(0.12f, 0.12f, 1.3f), new Color(0.85f, 0.85f, 0.9f));
-            }
+            body = MakeBody(transform, Class, out anim);
             BuildWings();
         }
 
-        void Part(PrimitiveType type, Vector3 pos, Vector3 scale, Color color)
+        void BuildWings()
+        {
+            if (wings != null) Destroy(wings.gameObject);
+            wings = MakeWings(transform, Data.wingsLevel);
+        }
+
+        // Model per class (Resources/Models/Knight, Mage, Archer, or Player), else placeholder shapes.
+        // Also used for other players seen online (RemotePlayer).
+        public static Transform MakeBody(Transform parent, ClassDef cls, out ModelAnimator animator)
+        {
+            var body = new GameObject("Body").transform;
+            body.SetParent(parent, false);
+
+            var model = ModelLibrary.Spawn(cls.Id, body, 1.9f, out animator)
+                        ?? ModelLibrary.Spawn("Player", body, 1.9f, out animator);
+            if (model != null) return body;
+
+            animator = null;
+            Part(body, PrimitiveType.Capsule, new Vector3(0, 1f, 0), Vector3.one, cls.BodyColor);
+            if (cls.Id == "Mage")
+            {
+                Part(body, PrimitiveType.Cylinder, new Vector3(0.55f, 1.1f, 0.2f), new Vector3(0.08f, 1f, 0.08f), new Color(0.45f, 0.3f, 0.15f));
+                Part(body, PrimitiveType.Sphere, new Vector3(0.55f, 2.15f, 0.2f), Vector3.one * 0.25f, new Color(0.4f, 0.8f, 1f));
+            }
+            else if (cls.Id == "Archer")
+                Part(body, PrimitiveType.Cube, new Vector3(0.5f, 1.1f, 0.35f), new Vector3(0.06f, 1.3f, 0.12f), new Color(0.5f, 0.32f, 0.15f));
+            else
+                Part(body, PrimitiveType.Cube, new Vector3(0.55f, 1.1f, 0.45f), new Vector3(0.12f, 0.12f, 1.3f), new Color(0.85f, 0.85f, 0.9f));
+            return body;
+        }
+
+        static void Part(Transform parent, PrimitiveType type, Vector3 pos, Vector3 scale, Color color)
         {
             var go = GameObject.CreatePrimitive(type);
             Destroy(go.GetComponent<Collider>());
-            go.transform.SetParent(body, false);
+            go.transform.SetParent(parent, false);
             go.transform.localPosition = pos;
             go.transform.localScale = scale;
             Paint.Color(go, color);
         }
 
-        // Two blades behind the back that grow and change colour every 10 levels.
-        void BuildWings()
+        // Two blades behind the back that grow and change colour every 10 levels. Null below level 1.
+        public static Transform MakeWings(Transform parent, int lv)
         {
-            if (wings != null) Destroy(wings.gameObject);
-            wings = null;
-            int lv = Data.wingsLevel;
-            if (lv <= 0) return;
-            wings = new GameObject("Wings").transform;
-            wings.SetParent(transform, false);
+            if (lv <= 0) return null;
+            var wings = new GameObject("Wings").transform;
+            wings.SetParent(parent, false);
             wings.localPosition = new Vector3(0, 1.35f, -0.35f);
             float size = 0.8f + Mathf.Min(lv, 50) * 0.02f;
             var color = Upgrades.WingColor(lv);
@@ -118,6 +124,7 @@ namespace MuProto
                 w.transform.localScale = new Vector3(1.1f * size, 0.6f * size, 0.04f);
                 Paint.Color(w, color);
             }
+            return wings;
         }
 
         void Update()
