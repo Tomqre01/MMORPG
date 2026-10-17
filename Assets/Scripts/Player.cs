@@ -44,6 +44,14 @@ namespace MuProto
             var root = new GameObject("Player");
             root.transform.position = position;
 
+            var model = ModelLibrary.Spawn("Player", root.transform, 1.9f, out var animator);
+            if (model != null)
+            {
+                var p = root.AddComponent<Player>();
+                p.anim = animator;
+                return p;
+            }
+
             var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             Destroy(body.GetComponent<Collider>());
             body.transform.SetParent(root.transform, false);
@@ -166,6 +174,7 @@ namespace MuProto
         {
             if (attackTimer > 0 || target == null || target.IsDead || FlatDistance(target) > AttackRange + 1.5f) return;
             attackTimer = AttackInterval;
+            PlayAction(ModelAnimator.Anim.Attack, AttackInterval * 0.9f);
             target.TakeDamage(RollDamage(Atk, 1f, out bool crit), crit, this);
         }
 
@@ -193,6 +202,7 @@ namespace MuProto
                     break;
             }
             skillCd[i] = SkillCooldowns[i];
+            PlayAction(ModelAnimator.Anim.Attack, 0.5f);
             return true;
         }
 

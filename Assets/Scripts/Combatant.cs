@@ -11,6 +11,10 @@ namespace MuProto
         public abstract int Def { get; }
         public bool IsDead => Hp <= 0;
 
+        protected ModelAnimator anim; // null when using placeholder shapes
+        bool movedThisFrame;
+        float actionLockUntil;
+
         public static int RollDamage(int atk, float multiplier, out bool crit)
         {
             crit = Random.value < 0.1f;
@@ -45,6 +49,7 @@ namespace MuProto
             p.x = Mathf.Clamp(p.x, -48f, 48f);
             p.z = Mathf.Clamp(p.z, -48f, 48f);
             transform.position = p;
+            movedThisFrame = true;
             Face(direction);
         }
 
@@ -53,6 +58,24 @@ namespace MuProto
             direction.y = 0;
             if (direction.sqrMagnitude > 0.0001f)
                 transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(direction), 15f * Time.deltaTime);
+        }
+
+        // One-shot animation (attack, hit) that holds off idle/run for lockTime seconds.
+        protected void PlayAction(ModelAnimator.Anim a, float lockTime)
+        {
+            if (anim == null) return;
+            anim.Play(a, true, lockTime);
+            actionLockUntil = Time.time + lockTime;
+        }
+
+        protected virtual void LateUpdate()
+        {
+            if (anim != null)
+            {
+                if (IsDead) anim.Play(ModelAnimator.Anim.Die);
+                else if (Time.time >= actionLockUntil) anim.Play(movedThisFrame ? ModelAnimator.Anim.Move : ModelAnimator.Anim.Idle);
+            }
+            movedThisFrame = false;
         }
 
         protected abstract Color DamageColor(bool crit);

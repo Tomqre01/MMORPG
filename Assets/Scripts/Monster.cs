@@ -34,14 +34,19 @@ namespace MuProto
             root.transform.position = position;
 
             float s = spawner.Scale;
-            var body = GameObject.CreatePrimitive(spawner.Level >= 20 ? PrimitiveType.Cube : PrimitiveType.Sphere);
-            Destroy(body.GetComponent<Collider>());
-            body.transform.SetParent(root.transform, false);
-            body.transform.localPosition = new Vector3(0, s * 0.5f, 0);
-            body.transform.localScale = Vector3.one * s;
-            body.GetComponent<Renderer>().material.color = spawner.Color;
+            var model = ModelLibrary.Spawn(spawner.MonsterName, root.transform, s * 1.4f, out var animator);
+            if (model == null)
+            {
+                var body = GameObject.CreatePrimitive(spawner.Level >= 20 ? PrimitiveType.Cube : PrimitiveType.Sphere);
+                Destroy(body.GetComponent<Collider>());
+                body.transform.SetParent(root.transform, false);
+                body.transform.localPosition = new Vector3(0, s * 0.5f, 0);
+                body.transform.localScale = Vector3.one * s;
+                body.GetComponent<Renderer>().material.color = spawner.Color;
+            }
 
             var m = root.AddComponent<Monster>();
+            m.anim = animator;
             m.spawner = spawner;
             m.Level = spawner.Level;
             m.maxHp = 40 + m.Level * 30;
@@ -50,7 +55,7 @@ namespace MuProto
             m.Hp = m.maxHp;
             m.home = position;
             m.wanderTarget = position;
-            m.BuildHpBar(s + 0.5f);
+            m.BuildHpBar(model != null ? s * 1.4f + 0.4f : s + 0.5f);
             return m;
         }
 
@@ -102,6 +107,7 @@ namespace MuProto
                 else if (attackTimer <= 0)
                 {
                     attackTimer = AttackInterval;
+                    PlayAction(ModelAnimator.Anim.Attack, 0.8f);
                     aggro.TakeDamage(RollDamage(atk, 1f, out bool crit), crit, this);
                 }
             }
@@ -126,8 +132,10 @@ namespace MuProto
             }
         }
 
-        void LateUpdate()
+        protected override void LateUpdate()
         {
+            base.LateUpdate();
+            if (IsDead) return;
             // The camera never rotates around Y, so an unrotated bar always faces it.
             hpBar.rotation = Quaternion.identity;
             float t = (float)Hp / maxHp;
@@ -141,13 +149,16 @@ namespace MuProto
         {
             aggro = source;
             returningHome = false;
+            if (!IsDead) PlayAction(ModelAnimator.Anim.Hit, 0.3f);
         }
 
         protected override void Die(Combatant killer)
         {
             if (Player.Instance != null) Player.Instance.OnKill(this);
             spawner.NotifyDeath();
-            Destroy(gameObject);
+            hpBar.gameObject.SetActive(false);
+            // Leave the body briefly so a death animation can play.
+            Destroy(gameObject, anim != null ? 1.5f : 0f);
         }
     }
 }

@@ -23,6 +23,9 @@
 
 ถ้ากด Play แล้วมีข้อความสีแดงในหน้าต่าง Console ให้ก๊อปมาส่งในเธรดได้เลย
 
+## ใส่โมเดล 3D แทนรูปทรง
+ดูวิธีใน [docs/models.md](docs/models.md) ใส่โมเดลฟรีจาก Asset Store ให้ตัวละคร มอน และต้นไม้ พร้อมท่าทางเดิน โจมตี ตาย
+
 ## ลงมือถือ Android (เมื่ออยากลองบนเครื่องจริง)
 File → Build Profiles → เลือก Android → Switch Platform → ตั้ง Orientation เป็น Landscape ใน Player Settings → ต่อมือถือที่เปิด USB debugging → Build And Run
 
@@ -36,6 +39,7 @@ File → Build Profiles → เลือก Android → Switch Platform → ต�
 | `World.cs` | สร้างแผนที่ โซนมอน กล้อง เอฟเฟกต์ และจุดเริ่มเกม |
 | `HUD.cs` | UI ทั้งหมด จอยสติ๊ก ตัวเลขดาเมจ หน้าต่างกระเป๋า |
 | `UIBuilder.cs` | ตัวช่วยสร้าง UI จากโค้ด |
+| `Models.cs` | โหลดโมเดล 3D จาก Resources/Models และเล่นท่าทาง (หรือขยับให้เองถ้าโมเดลไม่มีท่า) |
 
 ## ปรับสมดุลเกมได้ที่ไหน
 - ค่ามอน: `Monster.Create` ใน `Monster.cs` (เลือด ตี ป้องกัน) และ `ExpReward` / `GoldReward`
@@ -47,4 +51,3 @@ File → Build Profiles → เลือก Android → Switch Platform → ต�
 ## ข้อจำกัดของต้นแบบนี้
 - ยังเป็นออฟไลน์ (ออนไลน์คือเฟส 2)
 - ภาพเป็นรูปทรงเรขาคณิตชั่วคราว ข้อความในเกมเป็นภาษาอังกฤษ
-- โค้ดผ่านการคอมไพล์ตรวจสอบแล้ว แต่ยังไม่ได้ทดลองเล่นใน Unity จริง

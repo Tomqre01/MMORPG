@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MuProto
@@ -107,7 +108,6 @@ namespace MuProto
             ground.name = "Ground";
             ground.transform.localScale = new Vector3(10, 1, 10);
             ground.GetComponent<Renderer>().material.color = new Color(0.32f, 0.5f, 0.27f);
-            PlantTrees();
 
             if (Object.FindAnyObjectByType<Light>() == null)
             {
@@ -127,22 +127,34 @@ namespace MuProto
             cam.transform.position = player.transform.position + new Vector3(0, 13f, -10f);
             cam.gameObject.AddComponent<CameraFollow>().Target = player.transform;
 
-            MonsterSpawner.Create("Slime", 1, new Vector3(0, 0, 14), 7, 8, new Color(0.4f, 0.9f, 0.4f), 0.8f);
-            MonsterSpawner.Create("Goblin", 5, new Vector3(-24, 0, 26), 8, 8, new Color(0.65f, 0.45f, 0.25f), 1f);
-            MonsterSpawner.Create("Orc", 10, new Vector3(24, 0, 28), 8, 6, new Color(0.7f, 0.2f, 0.2f), 1.3f);
-            MonsterSpawner.Create("Golem", 20, new Vector3(0, 0, -30), 7, 3, new Color(0.55f, 0.55f, 0.6f), 2f);
+            var zones = new List<MonsterSpawner>
+            {
+                MonsterSpawner.Create("Slime", 1, new Vector3(0, 0, 14), 7, 8, new Color(0.4f, 0.9f, 0.4f), 0.8f),
+                MonsterSpawner.Create("Goblin", 5, new Vector3(-24, 0, 26), 8, 8, new Color(0.65f, 0.45f, 0.25f), 1f),
+                MonsterSpawner.Create("Orc", 10, new Vector3(24, 0, 28), 8, 6, new Color(0.7f, 0.2f, 0.2f), 1.3f),
+                MonsterSpawner.Create("Golem", 20, new Vector3(0, 0, -30), 7, 3, new Color(0.55f, 0.55f, 0.6f), 2f),
+            };
+            PlantTrees(zones);
 
             HUD.Create();
         }
 
-        static void PlantTrees()
+        static void PlantTrees(List<MonsterSpawner> zones)
         {
             var state = Random.state;
             Random.InitState(42);
             for (int i = 0; i < 70; i++)
             {
                 var p = new Vector3(Random.Range(-47f, 47f), 0, Random.Range(-47f, 47f));
-                if (p.magnitude < 6f) continue;
+                if (p.magnitude < 6f || InsideZone(p, zones)) continue;
+                if (ModelLibrary.Find("Tree") != null)
+                {
+                    var holder = new GameObject("Tree").transform;
+                    holder.position = p;
+                    holder.rotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
+                    ModelLibrary.Spawn("Tree", holder, Random.Range(3.5f, 5.5f), out _, procedural: false);
+                    continue;
+                }
                 var trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 Object.Destroy(trunk.GetComponent<Collider>());
                 trunk.transform.position = p + Vector3.up;
@@ -155,6 +167,18 @@ namespace MuProto
                 top.GetComponent<Renderer>().material.color = new Color(0.18f, 0.42f, 0.2f);
             }
             Random.state = state;
+        }
+
+        // Keeps trees off the zone discs (plus a margin for the tree crown) so they never hide monsters.
+        static bool InsideZone(Vector3 p, List<MonsterSpawner> zones)
+        {
+            foreach (var z in zones)
+            {
+                Vector3 d = p - z.transform.position;
+                d.y = 0;
+                if (d.magnitude < z.Radius * 1.2f + 2.5f) return true;
+            }
+            return false;
         }
     }
 }
