@@ -15,7 +15,14 @@
 | `Tree` | ต้นไม้ในแผนที่ |
 
 โค้ดจะปรับขนาดโมเดลให้พอดีเอง และหาท่าทางจากชื่อคลิป (idle, run/walk, attack, hit, die) ให้เอง
-โมเดลที่ใช้ได้ต้องมี **Animator** ติดมากับ prefab ซึ่งแพ็กตัวละครส่วนใหญ่มีอยู่แล้ว
+ถ้าโมเดลมี **Animator** พร้อมท่าทาง (แพ็กตัวละครส่วนใหญ่มี) จะใช้ท่าของแพ็ก
+ถ้าเป็นโมเดลเปล่าไม่มีท่าทาง (เช่นไฟล์ .obj) เกมจะขยับให้เองแบบง่ายๆ คือ กระโดดเหยาะตอนเดิน พุ่งตอนตี สะดุ้งตอนโดนตี และล้มตอนตาย
+
+## Goblin, Orc และ Golem มีมาให้แล้วในโปรเจกต์นี้
+โฟลเดอร์ `Assets/Resources/Models/Goblin`, `Orc` และ `Golem` มีโมเดล low-poly พร้อมวัสดุ URP อยู่แล้ว (Orc ตาแดงเรืองแสงถือขวาน, Golem มีคริสตัลเรืองแสง)
+1. คัดลอกโฟลเดอร์ `Assets/Resources` ทั้งโฟลเดอร์ ไปวางทับใน `Assets` ของโปรเจกต์ Unity
+2. ถ้าเคยตั้ง prefab ชื่อ `Goblin` `Orc` หรือ `Golem` ไว้ใน `Resources/Models` (เช่น TurtleShell) ให้ลบหรือเปลี่ยนชื่อทิ้ง ไม่งั้นเกมจะหยิบตัวเก่าก่อน
+3. กด Play แล้วเดินไปโซนซ้ายบน (Goblin Lv5) ขวาบน (Orc Lv10) หรือด้านหลัง (Golem Lv20)
 
 ## ขั้นที่ 1: เอาแพ็กฟรีจาก Asset Store
 1. เปิด [assetstore.unity.com](https://assetstore.unity.com) แล้วล็อกอินด้วยบัญชี Unity เดียวกับใน Unity Hub
@@ -39,7 +46,6 @@
 ตัวอย่างจากสองแพ็กที่แนะนำ:
 - prefab ของ Dog Knight → ตั้งชื่อ `Player`
 - prefab ของ Slime → ตั้งชื่อ `Slime`
-- prefab ของ TurtleShell → ตั้งชื่อ `Goblin`
 
 จะวางเป็นโฟลเดอร์ก็ได้ เช่น `Resources/Models/Player/` แล้วใส่ prefab ชื่ออะไรก็ได้ไว้ข้างใน เกมจะหยิบตัวที่มีท่าทางมาใช้ แต่ชื่อโฟลเดอร์ต้องตรงกับตาราง
 
@@ -53,3 +59,17 @@
 
 ## ถ้ามีอะไรแปลกๆ
 เช่น โมเดลนอนราบ หันผิดทาง หรือไม่ขยับ ให้แคปหน้าจอพร้อมบอกชื่อแพ็กมาในเธรด จะแก้ให้ตรงกับแพ็กนั้น
+
+## ใส่กระดูกและท่าทางจริงให้ Goblin, Orc, Golem ด้วย Blender
+โมเดลที่มากับโปรเจกต์ขยับได้อยู่แล้วแบบง่าย ถ้าอยากให้แขนขาขยับจริง (เดินสลับขา ง้างแขนตี ล้มลงตอนตาย) ใช้สคริปต์ Blender ที่เตรียมไว้
+
+1. ติดตั้ง **Blender 4.2 ขึ้นไป** จาก [blender.org/download](https://www.blender.org/download/) (ฟรี)
+2. เปิด Command Prompt แล้วรันคำสั่งนี้ (แก้ path ให้ตรงกับเครื่อง)
+   ```
+   "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe" -b -P "C:\path\to\MMORPG\Tools\Blender\rig_monsters.py" -- "C:\path\to\โปรเจกต์Unity\Assets\Resources\Models"
+   ```
+   หรือเปิด Blender → แท็บ **Scripting** → **Open** ไฟล์ `rig_monsters.py` → ใส่ path โฟลเดอร์ Models ในบรรทัด `MODELS_DIR = r""` → กด **Run Script** (ปุ่ม ▶)
+3. สคริปต์จะสร้างไฟล์ `Goblin_Rigged.fbx`, `Orc_Rigged.fbx`, `Golem_Rigged.fbx` ไว้ในโฟลเดอร์ของแต่ละตัว พร้อมท่า Idle, Walk, Attack, Hit, Die
+4. กลับมาที่ Unity รอ import เสร็จ แล้วกด Play เกมจะเลือกไฟล์ที่มีกระดูกให้เอง
+
+จะแก้แค่ตัวเดียวก็ได้ ใส่ชื่อในบรรทัด `ONLY = ["Orc"]`
