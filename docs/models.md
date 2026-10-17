@@ -6,10 +6,11 @@
 | ชื่อไฟล์ prefab | ใช้กับ |
 |---|---|
 | `Player` | ตัวละครของเรา |
-| `Slime` | มอนโซน Lv1 |
+| `Slime` | มอนโซน Lv1 (มีโมเดลของเราเองแล้ว `Slime_Rigged.fbx`) |
 | `Goblin` | มอนโซน Lv5 |
 | `Orc` | มอนโซน Lv10 |
 | `Golem` | มอนโซน Lv20 |
+| `Pet` | สัตว์เลี้ยงของผู้เล่น (เต่า `Pet_Rigged.fbx`) |
 | `Tree` | ต้นไม้ในแผนที่ |
 
 โค้ดจะปรับขนาดโมเดลให้พอดีเอง และหาท่าทางจากชื่อคลิป (idle, run/walk, attack, hit, die) ให้เอง
@@ -71,3 +72,16 @@
 4. กลับมาที่ Unity รอ import เสร็จ แล้วกด Play เกมจะเลือกไฟล์ที่มีกระดูกให้เอง
 
 จะแก้แค่ตัวเดียวก็ได้ ใส่ชื่อในบรรทัด `ONLY = ["Orc"]`
+
+## Slime กับเต่าสัตว์เลี้ยง (ปั้นใน Blender ทั้งตัว)
+สคริปต์ `Tools/Blender/build_slime_turtle.py` ปั้นโมเดล ใส่กระดูก ทำท่า Idle, Walk, Attack, Hit, Die และ export ให้เลย
+ไม่ต้องใช้โมเดลฟรีจาก Asset Store อีกต่อไป
+
+| ![Slime](images/slime.png) | ![เต่า](images/pet_turtle.png) |
+|---|---|
+
+1. เปิด Blender ไปที่แท็บ **Scripting** แล้วแก้บรรทัด `MODELS_DIR = r""` ให้ชี้ไปที่ `Assets\Resources\Models` ของโปรเจกต์
+2. กด **Run Script** จะได้ `Slime/Slime_Rigged.fbx` และ `Pet/Pet_Rigged.fbx`
+3. กลับไป Unity แล้วกด Play
+
+ไฟล์ชื่อ `<ชื่อ>_Rigged` ในโฟลเดอร์จะถูกเลือกก่อนเสมอ ถึงจะมี prefab จากแพ็กฟรีอยู่ในโฟลเดอร์เดียวกันก็ตาม

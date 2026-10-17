@@ -16,7 +16,9 @@ namespace MuProto
         {
             if (!cache.TryGetValue(name, out var prefab))
             {
-                prefab = Resources.Load<GameObject>("Models/" + name) ?? FirstInFolder("Models/" + name);
+                // Our own Blender export (Models/<Name>/<Name>_Rigged) wins over anything else in the folder.
+                prefab = Resources.Load<GameObject>("Models/" + name + "/" + name + "_Rigged")
+                         ?? Resources.Load<GameObject>("Models/" + name) ?? FirstInFolder("Models/" + name);
                 cache[name] = prefab;
             }
             return prefab;
