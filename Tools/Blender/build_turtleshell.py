@@ -110,6 +110,15 @@ class Builder:
             obj.vertex_groups.new(name=b)
         return obj
 
+def add_origin(data):
+    """A still top bone. Unity applies non-uniform scale on the topmost bone along the wrong axes
+    (a squashing slime puffed up into a big ball), so every animated bone must have a parent."""
+    origin = data.edit_bones.new("Origin")
+    origin.head, origin.tail, origin.roll = Vector((0, 0, 0)), Vector((0, 0, 0.05)), 0.0
+    for eb in data.edit_bones:
+        if eb is not origin and eb.parent is None:
+            eb.parent = origin
+
 def build_armature(name, joints, parents):
     data = bpy.data.armatures.new(name + "_Armature")
     arm = bpy.data.objects.new("Armature", data)
@@ -124,6 +133,7 @@ def build_armature(name, joints, parents):
     for b, p in parents.items():
         if p:
             data.edit_bones[b].parent = data.edit_bones[p]
+    add_origin(data)
     bpy.ops.object.mode_set(mode="OBJECT")
     return arm
 

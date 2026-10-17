@@ -8,7 +8,7 @@ namespace MuProto
         public static readonly List<Monster> All = new List<Monster>();
 
         const float AggroRadius = 5f;
-        const float LeashRadius = 18f;
+        const float LeashBeyondZone = 6f; // how far past its zone's edge a monster will chase
         const float AttackRange = 1.8f;
         const float AttackInterval = 1.2f;
 
@@ -105,7 +105,9 @@ namespace MuProto
 
             Vector3 fromHome = transform.position - home;
             fromHome.y = 0;
-            if (aggro != null && (aggro.IsDead || fromHome.magnitude > LeashRadius))
+            Vector3 fromZone = transform.position - spawner.transform.position;
+            fromZone.y = 0;
+            if (aggro != null && (aggro.IsDead || fromZone.magnitude > spawner.Radius + LeashBeyondZone))
             {
                 aggro = null;
                 returningHome = true;
@@ -141,6 +143,35 @@ namespace MuProto
                 d.y = 0;
                 if (d.magnitude > 0.2f) Step(d, 1.5f);
             }
+            KeepApart(dt);
+        }
+
+        float BodyRadius => spawner.Scale * 0.5f;
+
+        // Nudge away from other monsters and the player so they surround instead of stacking.
+        void KeepApart(float dt)
+        {
+            Vector3 push = Vector3.zero;
+            foreach (var o in All)
+            {
+                if (o == this || o.IsDead) continue;
+                push += Separation(o.transform.position, BodyRadius + o.BodyRadius);
+            }
+            var player = Player.Instance;
+            if (player != null && !player.IsDead)
+                push += Separation(player.transform.position, BodyRadius + 0.6f);
+            if (push.sqrMagnitude > 0.0001f)
+                transform.position += Vector3.ClampMagnitude(push, 1f) * Mathf.Min(1f, 10f * dt);
+        }
+
+        Vector3 Separation(Vector3 other, float minDist)
+        {
+            Vector3 d = transform.position - other;
+            d.y = 0;
+            float m = d.magnitude;
+            if (m >= minDist) return Vector3.zero;
+            if (m < 0.001f) d = new Vector3(Random.value - 0.5f, 0, Random.value - 0.5f);
+            return d.normalized * (minDist - m);
         }
 
         protected override void LateUpdate()
