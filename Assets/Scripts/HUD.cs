@@ -9,11 +9,23 @@ namespace MuProto
         public static HUD Instance { get; private set; }
         public RectTransform FxLayer { get; private set; }
 
-        Text levelText, hpText, goldText, centerText;
+        Text levelText, hpText, goldText, centerText, dungeonText, dungeonButtonText;
         RectTransform hpFill, expFill;
         Image[] cooldowns = new Image[3];
+        Text[] skillLabels = new Text[3];
         Button autoButton;
         InventoryUI inventory;
+        UpgradePanel wingsPanel, petPanel;
+        GameObject classSelect;
+        string message;
+        float messageUntil;
+
+        public static void Message(string text, float seconds)
+        {
+            if (Instance == null) return;
+            Instance.message = text;
+            Instance.messageUntil = Time.time + seconds;
+        }
 
         public static void Create()
         {
@@ -76,8 +88,9 @@ namespace MuProto
             for (int i = 0; i < 3; i++)
             {
                 int idx = i;
-                var b = UIB.Button(root, Player.SkillNames[i], br, skillPos[i], new Vector2(150, 150), new Color(0.25f, 0.35f, 0.7f, 0.85f),
-                    () => Player.Instance.UseSkill(idx), UIB.Circle, 28, center);
+                var b = UIB.Button(root, "Skill", br, skillPos[i], new Vector2(150, 150), new Color(0.25f, 0.35f, 0.7f, 0.85f),
+                    () => Player.Instance.UseSkill(idx), UIB.Circle, 24, center);
+                skillLabels[i] = b.GetComponentInChildren<Text>();
                 var cd = UIB.Image(UIB.Stretch(UIB.Rect("Cooldown", b.transform, Vector2.zero, Vector2.zero, Vector2.zero)), new Color(0, 0, 0, 0.6f), UIB.Circle);
                 cd.type = Image.Type.Filled;
                 cd.fillMethod = Image.FillMethod.Radial360;
@@ -89,10 +102,57 @@ namespace MuProto
             autoButton = UIB.Button(root, "AUTO", br, new Vector2(-560, 470), new Vector2(170, 90), Color.gray,
                 () => Player.Instance.AutoBattle = !Player.Instance.AutoBattle, null, 32, center);
 
-            UIB.Button(root, "Bag", new Vector2(1, 1), new Vector2(-20, -20), new Vector2(180, 90), new Color(0.3f, 0.3f, 0.35f, 0.9f),
-                () => inventory.Toggle());
+            var tr = new Vector2(1, 1);
+            var menuColor = new Color(0.3f, 0.3f, 0.35f, 0.9f);
+            UIB.Button(root, "Bag", tr, new Vector2(-20, -20), new Vector2(170, 90), menuColor, () => inventory.Toggle());
+            UIB.Button(root, "Wings", tr, new Vector2(-200, -20), new Vector2(170, 90), menuColor, () => wingsPanel.Toggle());
+            UIB.Button(root, "Pet", tr, new Vector2(-380, -20), new Vector2(170, 90), menuColor, () => petPanel.Toggle());
+            var dungeonButton = UIB.Button(root, "Dungeon", tr, new Vector2(-560, -20), new Vector2(210, 90), new Color(0.45f, 0.25f, 0.5f, 0.9f), () =>
+            {
+                if (Dungeon.Active != null) Dungeon.Active.Leave();
+                else if (!Dungeon.Enter()) Message(Player.Instance.DungeonRunsLeft <= 0 ? "No dungeon runs left today" : "Can't enter right now", 2f);
+            }, null, 26);
+            dungeonButtonText = dungeonButton.GetComponentInChildren<Text>();
+            dungeonText = UIB.Label(root, "", 36, new Vector2(0.5f, 1), new Vector2(0, -40), new Vector2(700, 60), TextAnchor.MiddleCenter);
 
             inventory = new InventoryUI(root);
+            wingsPanel = new UpgradePanel(root, "Wings", () =>
+            {
+                var d = Player.Instance.Data;
+                int lv = d.wingsLevel;
+                string now = lv == 0 ? "No wings yet" : "Wings Lv " + lv + "\nATK +" + lv * 4 + "   DEF +" + lv * 2 + "   HP +" + lv * 30;
+                string cost = lv >= Upgrades.MaxWings ? "Max level" :
+                    "Next: " + Upgrades.WingFeathers(lv) + " Feathers + " + Upgrades.WingGold(lv) + "g\nYou have " + d.feathers + " Feathers, " + d.gold + "g";
+                return now + "\n\n" + cost + "\n\nFeathers drop from monsters and the dungeon.";
+            }, () => Player.Instance.Data.wingsLevel == 0 ? "Craft Wings" : "Upgrade", () => Player.Instance.UpgradeWings());
+            petPanel = new UpgradePanel(root, "Pet", () =>
+            {
+                var d = Player.Instance.Data;
+                int lv = d.petLevel;
+                if (lv == 0) return "No pet yet\n\nAdopt one for " + Upgrades.PetAdoptCost + "g.\nIt follows you and attacks your target.\n\nYou have " + d.gold + "g";
+                string cost = lv >= Upgrades.MaxPet ? "Max level" :
+                    "Next: " + Upgrades.PetFood(lv) + " Pet Food + " + Upgrades.PetGold(lv) + "g\nYou have " + d.petFood + " Pet Food, " + d.gold + "g";
+                return "Pet Lv " + lv + "\nDamage about " + Pet.Instance.Damage + " every 1.5s\n\n" + cost + "\n\nPet Food drops from monsters and the dungeon.";
+            }, () => Player.Instance.Data.petLevel == 0 ? "Adopt" : "Feed", () => Player.Instance.UpgradePet());
+
+            BuildClassSelect(root);
+        }
+
+        // Full-screen class picker, shown until the save has a class.
+        void BuildClassSelect(Transform root)
+        {
+            var center = new Vector2(0.5f, 0.5f);
+            var panel = UIB.Stretch(UIB.Rect("Class Select", root, Vector2.zero, Vector2.zero, Vector2.zero));
+            UIB.Image(panel, new Color(0.05f, 0.05f, 0.1f, 0.95f));
+            UIB.Label(panel, "Choose your class", 56, new Vector2(0.5f, 1), new Vector2(0, -90), new Vector2(900, 90), TextAnchor.MiddleCenter);
+            for (int i = 0; i < Classes.All.Length; i++)
+            {
+                var c = Classes.All[i];
+                var b = UIB.Button(panel, c.Name + "\n\n" + c.Description, center, new Vector2((i - 1) * 460, -40), new Vector2(420, 460),
+                    Color.Lerp(c.BodyColor, Color.black, 0.45f), () => Player.Instance.ChooseClass(c.Id), null, 34, center);
+                b.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleCenter;
+            }
+            classSelect = panel.gameObject;
         }
 
         void Update()
@@ -106,9 +166,18 @@ namespace MuProto
             hpText.text = p.Hp + " / " + p.MaxHp;
             UIB.SetBar(expFill, (float)d.exp / need);
             goldText.text = "Gold " + d.gold + "     EXP " + d.exp + "/" + need;
-            for (int i = 0; i < 3; i++) cooldowns[i].fillAmount = p.SkillCooldownRatio(i);
+            classSelect.SetActive(!p.HasClass);
+            for (int i = 0; i < 3; i++)
+            {
+                cooldowns[i].fillAmount = p.SkillCooldownRatio(i);
+                skillLabels[i].text = p.Class.Skills[i].Name;
+            }
+            var run = Dungeon.Active;
+            dungeonButtonText.text = run != null ? "Leave" : "Dungeon " + p.DungeonRunsLeft + "/" + Upgrades.DungeonRunsPerDay;
+            dungeonText.text = run != null ? "Wave " + run.Wave + "/" + Dungeon.Waves + "    Time " + Mathf.CeilToInt(run.TimeLeft) : "";
             autoButton.image.color = p.AutoBattle ? new Color(0.2f, 0.7f, 0.3f, 0.95f) : new Color(0.4f, 0.4f, 0.4f, 0.85f);
-            centerText.text = p.IsDead ? "Defeated. Respawn in " + Mathf.CeilToInt(p.RespawnIn) : "";
+            centerText.text = p.IsDead ? "Defeated. Respawn in " + Mathf.CeilToInt(p.RespawnIn)
+                : Time.time < messageUntil ? message : "";
         }
     }
 
@@ -168,6 +237,48 @@ namespace MuProto
             Vector3 sp = cam.WorldToScreenPoint(world + Vector3.up * t * 1.5f);
             text.enabled = sp.z > 0;
             transform.position = new Vector3(sp.x, sp.y, 0);
+        }
+    }
+
+    // Small centred window: a description, one action button and a result line.
+    public class UpgradePanel
+    {
+        readonly RectTransform panel;
+        readonly Text info, result, actionLabel;
+        readonly System.Func<string> describe, label;
+
+        public UpgradePanel(Transform canvas, string title, System.Func<string> describe, System.Func<string> label, System.Func<bool> action)
+        {
+            this.describe = describe;
+            this.label = label;
+            var center = new Vector2(0.5f, 0.5f);
+            var tl = new Vector2(0, 1);
+            panel = UIB.Rect(title, canvas, center, Vector2.zero, new Vector2(820, 640));
+            UIB.Image(panel, new Color(0.08f, 0.08f, 0.12f, 0.95f));
+            UIB.Label(panel, title, 44, tl, new Vector2(30, -20), new Vector2(700, 60));
+            info = UIB.Label(panel, "", 30, tl, new Vector2(30, -110), new Vector2(760, 300), TextAnchor.UpperLeft);
+            result = UIB.Label(panel, "", 30, new Vector2(0, 0), new Vector2(30, 130), new Vector2(760, 50));
+            var b = UIB.Button(panel, "Upgrade", new Vector2(0, 0), new Vector2(30, 30), new Vector2(300, 90), new Color(0.2f, 0.45f, 0.25f), () =>
+            {
+                result.text = action() ? "Success!" : "Not enough materials";
+                Refresh();
+            });
+            actionLabel = b.GetComponentInChildren<Text>();
+            UIB.Button(panel, "Close", new Vector2(1, 0), new Vector2(-30, 30), new Vector2(200, 90), new Color(0.3f, 0.3f, 0.35f), Toggle);
+            panel.gameObject.SetActive(false);
+        }
+
+        public void Toggle()
+        {
+            bool show = !panel.gameObject.activeSelf;
+            panel.gameObject.SetActive(show);
+            if (show) { result.text = ""; Refresh(); }
+        }
+
+        void Refresh()
+        {
+            info.text = describe();
+            actionLabel.text = label();
         }
     }
 
