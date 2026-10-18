@@ -145,24 +145,33 @@ namespace MuProto
             onDone = done;
             var center = new Vector2(0.5f, 0.5f);
             var panel = UIB.Stretch(UIB.Rect("Panel", transform, Vector2.zero, Vector2.zero, Vector2.zero));
-            UIB.Image(panel, new Color(0.05f, 0.05f, 0.1f, 1f));
-            UIB.Label(panel, "MU Proto", 90, center, new Vector2(0, 300), new Vector2(1000, 120), TextAnchor.MiddleCenter);
+            UIB.Image(panel, new Color(0.03f, 0.03f, 0.05f, 1f));
+            UIB.Image(UIB.Rect("Glow", panel, center, new Vector2(0, 200), new Vector2(2400, 1300), center), new Color(0.7f, 0.35f, 0.12f, 0.35f), Skin.Soft).raycastTarget = false;
+            var plate = UIB.Rect("Title", panel, center, new Vector2(0, 330), new Vector2(1100, 170), center);
+            UIB.Image(plate, Color.white, Skin.Banner).raycastTarget = false;
+            var title = Skin.Title(plate, "MU PROTO", 96, center, Vector2.zero, new Vector2(1100, 150));
+            title.rectTransform.pivot = center;
+            var sub = UIB.Label(panel, "an MU Origin style prototype", 30, center, new Vector2(0, 228), new Vector2(1000, 50), TextAnchor.MiddleCenter);
+            sub.rectTransform.pivot = center;
+            sub.color = Skin.Muted;
+            Skin.Frame(panel, "Box", center, new Vector2(0, 35), new Vector2(1060, 330), center).GetComponent<Image>().raycastTarget = false;
 
-            UIB.Label(panel, "Server", 36, center, new Vector2(-460, 110), new Vector2(200, 80), TextAnchor.MiddleLeft);
+            var server = UIB.Label(panel, "Server", 34, center, new Vector2(-410, 110), new Vector2(200, 80), TextAnchor.MiddleLeft);
+            server.color = Skin.Gold;
             hostField = MakeField(panel, Online.Host, center, new Vector2(80, 110), new Vector2(720, 80));
 
             loginButton = UIB.Button(panel, "Login", center, new Vector2(-190, -40), new Vector2(340, 110),
-                new Color(0.2f, 0.55f, 0.3f, 0.95f), Login, null, 40, center);
+                Skin.Red, Login, null, 40, center);
             UIB.Button(panel, "Play Offline", center, new Vector2(190, -40), new Vector2(340, 110),
-                new Color(0.35f, 0.35f, 0.4f, 0.95f), () => Finish("Playing offline"), null, 40, center);
+                Skin.Slate, () => Finish("Playing offline"), null, 40, center);
 
-            status = UIB.Label(panel, "", 32, center, new Vector2(0, -190), new Vector2(1400, 80), TextAnchor.MiddleCenter);
+            status = UIB.Label(panel, "", 32, center, new Vector2(0, -210), new Vector2(1400, 80), TextAnchor.MiddleCenter);
         }
 
         static InputField MakeField(Transform parent, string value, Vector2 anchor, Vector2 pos, Vector2 size)
         {
             var rt = UIB.Rect("Server Field", parent, anchor, pos, size, anchor);
-            var bg = UIB.Image(rt, new Color(1, 1, 1, 0.12f));
+            var bg = Skin.Sliced(rt, Skin.Inset, Color.white);
             var textRt = UIB.Stretch(UIB.Rect("Text", rt, Vector2.zero, Vector2.zero, Vector2.zero));
             textRt.offsetMin = new Vector2(20, 0);
             textRt.offsetMax = new Vector2(-20, 0);
