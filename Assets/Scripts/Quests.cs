@@ -21,26 +21,26 @@ namespace MuProto
 
         static readonly QuestDef[] Chain =
         {
-            Q(QuestKind.Kill, "Slime", 10, 200, 1),
+            Q(QuestKind.Kill, "แมงมุม", 10, 200, 1),          // Lorencia spiders
             Q(QuestKind.Level, null, 5, 300, 1),
-            Q(QuestKind.Kill, "Turtle", 10, 400, 1),
+            Q(QuestKind.Kill, "มังกรเด็ก", 10, 400, 1),
             Q(QuestKind.Pet, null, 1, 300),
-            Q(QuestKind.Kill, "Goblin", 15, 600, 2),
+            Q(QuestKind.Kill, "ปีศาจวัว", 15, 600, 2),
             Q(QuestKind.Enhance, null, 3, 800, 2),
             Q(QuestKind.Level, null, 15, 1000, 2, 1),
-            Q(QuestKind.Kill, "Elite Goblin", 20, 1500, 2, 0, 5),     // Noria
+            Q(QuestKind.Kill, "ทหารกระดูก", 20, 1500, 2, 0, 5),      // Lorencia skeletons
             Q(QuestKind.DevilSquare, null, 1, 2000, 2, 1),
             Q(QuestKind.Wings, null, 1, 2000, 2, 1, 3),
-            Q(QuestKind.Kill, "Forest Orc", 20, 3000, 3, 1, 3),
+            Q(QuestKind.Kill, "ก็อบลินเด็ก", 20, 3000, 3, 1, 3),   // Noria
             Q(QuestKind.BloodCastle, null, 1, 4000, 3, 1),
             Q(QuestKind.Level, null, 35, 5000, 3, 2),
-            Q(QuestKind.Kill, "Ice Turtle", 25, 6000, 3, 2, 5),       // Devias
+            Q(QuestKind.Kill, "หนอนหิมะ", 25, 6000, 3, 2, 5),         // Devias
             Q(QuestKind.WorldBoss, null, 1, 6000, 3, 2),
             Q(QuestKind.Enhance, null, 7, 8000, 2, 2),
             Q(QuestKind.Level, null, 55, 10000, 4, 2),
-            Q(QuestKind.Kill, "Stone Golem", 30, 12000, 4, 3, 5),     // Lost Tower
+            Q(QuestKind.Kill, "หนอนพิษ", 30, 12000, 4, 3, 5),         // Dungeon
             Q(QuestKind.Level, null, 80, 15000, 5, 3),
-            Q(QuestKind.Kill, "Shell Lord", 30, 20000, 5, 3, 8),      // Atlans
+            Q(QuestKind.Kill, "พ่อมดสาปแช่ง", 30, 20000, 5, 3, 8),    // Lost Tower
             Q(QuestKind.Level, null, 100, 25000, 5, 4),
             Q(QuestKind.Rebirth, null, 1, 30000, 5, 5, 10),
         };
@@ -105,7 +105,7 @@ namespace MuProto
         {
             var q = Current(p.Data);
             if ((q.Kind == QuestKind.Kill && m.DisplayName == q.Target) ||
-                (q.Kind == QuestKind.Hunt && m.Level >= p.Data.level - 15))
+                (q.Kind == QuestKind.Hunt && m.Level >= GameData.Power(p.Data) - 15))
                 p.Data.questProgress++;
             Check(p);
         }

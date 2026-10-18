@@ -64,7 +64,7 @@ namespace MuProto
             m.anim = animator;
             m.spawner = spawner;
             m.Level = spawner.Level;
-            m.DisplayName = spawner.MonsterName;
+            m.DisplayName = spawner.Elite ? "ชั้นยอด·" + spawner.MonsterName : spawner.MonsterName;
             m.maxHp = GameData.MonsterHp(m.Level);
             m.atk = GameData.MonsterAtk(m.Level);
             m.def = GameData.MonsterDef(m.Level);
@@ -72,6 +72,7 @@ namespace MuProto
             m.home = position;
             m.wanderTarget = position;
             m.BuildHpBar(model != null ? s * 1.4f + 0.4f : s + 0.5f);
+            if (spawner.Elite) m.MakeBoss(8f);
             return m;
         }
 

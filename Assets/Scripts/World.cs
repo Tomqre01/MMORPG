@@ -9,6 +9,7 @@ namespace MuProto
         public static readonly List<MonsterSpawner> Field = new List<MonsterSpawner>(); // open-world zones, by level
 
         public int Map = -1;         // map id for open-world zones (woken by Maps.Show); -1 = dungeon / event
+        public bool Elite;           // a single named elite: boss-strength, respawns after a minute
         public string MonsterName;   // shown and used by quests
         public string ModelName;     // Resources/Models/<ModelName>
         public Color Tint = Color.white;
@@ -81,7 +82,7 @@ namespace MuProto
             if (!active || alive >= Count) return;
             timer -= Time.deltaTime;
             if (timer > 0) return;
-            timer = 2f;
+            timer = Elite ? 60f : 2f;
             Spawn();
         }
 
@@ -103,7 +104,7 @@ namespace MuProto
         {
             MonsterSpawner best = null;
             foreach (var z in Field)
-                if (z.Level <= level + 2 && (best == null || z.Level > best.Level)) best = z;
+                if (!z.Elite && z.Level <= level + 2 && (best == null || z.Level > best.Level)) best = z;
             return best ?? (Field.Count > 0 ? Field[0] : null);
         }
 
@@ -116,6 +117,7 @@ namespace MuProto
         public void NotifyDeath(Monster m)
         {
             alive--;
+            if (Elite) timer = 60f;
             Died?.Invoke(m);
         }
     }

@@ -58,6 +58,13 @@ namespace MuProto.EditorTools
                 yield return new WaitForSecondsRealtime(0.6f);
                 HUD.Instance.CloseAll();
             }
+            // Let auto-battle find a monster, so the target frame and a fight are in the last shot.
+            Player.Instance.AutoBattle = true;
+            yield return new WaitForSecondsRealtime(9f);
+            HUD.Instance.CloseAll(); // walking past the merchant opens the shop
+            yield return null;
+            ScreenCapture.CaptureScreenshot(Path.Combine(dir, "Fight.png"));
+            yield return new WaitForSecondsRealtime(0.5f);
             Debug.Log("[UIShots] Saved to " + dir);
         }
     }

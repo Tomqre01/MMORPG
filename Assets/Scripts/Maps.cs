@@ -6,7 +6,8 @@ namespace MuProto
     public class ZoneDef
     {
         public string Name, Model;
-        public int Level, Count;
+        public int Level, Count;   // Level is GameData power: rebirth * 100 + level
+        public bool Elite;         // one tough named monster (ชั้นยอด), respawns slowly
         public Vector3 Offset;     // from the map centre
         public float Radius, Scale;
         public Color Tint = Color.white;
@@ -14,104 +15,24 @@ namespace MuProto
 
     public class MapDef
     {
-        public int Id;
+        public int Id, ServerCode;
         public string Name;
         public int MinLevel, MinRebirth, Cost;
+        public int MinPower => MinRebirth * 100 + MinLevel;
+        public string Requirement => MinRebirth > 0 ? MinRebirth + "R Lv" + MinLevel : "Lv " + MinLevel;
         public Vector3 Center;
-        public Color Ground, Town, Tree, Trunk;
+        public Color Ground, Town, Tree, Trunk, MonsterTint = Color.white;
         public ZoneDef[] Zones;
         public Rect Bounds => new Rect(Center.x - 48f, Center.z - 48f, 96f, 96f);
     }
 
     // The MU Origin maps. They all live in the one scene, 1000 units apart; only the map you are on
     // is shown and has monsters, the rest sleep.
-    public static class Maps
+    public static partial class Maps
     {
-        static ZoneDef Z(string name, string model, int lv, float x, float z, int count, float scale, Color? tint = null, float radius = 7f) =>
-            new ZoneDef { Name = name, Model = model, Level = lv, Offset = new Vector3(x, 0, z), Count = count, Scale = scale, Radius = radius, Tint = tint ?? Color.white };
-
-        public static readonly MapDef[] All =
-        {
-            new MapDef
-            {
-                Id = 0, Name = "Lorencia", MinLevel = 1, Cost = 0, Center = Vector3.zero,
-                Ground = new Color(0.32f, 0.5f, 0.27f), Town = new Color(0.62f, 0.58f, 0.5f), Tree = new Color(0.18f, 0.42f, 0.2f), Trunk = new Color(0.4f, 0.28f, 0.15f),
-                Zones = new[]
-                {
-                    Z("Slime", "Slime", 1, 0, 16, 8, 0.8f),
-                    Z("Turtle", "Turtle", 3, -24, 2, 6, 0.8f),
-                    Z("Goblin", "Goblin", 5, -24, 26, 8, 1f, null, 8f),
-                    Z("Orc", "Orc", 10, 24, 28, 6, 1.3f, null, 8f),
-                    Z("Golem", "Golem", 20, 0, -30, 3, 2f),
-                },
-            },
-            new MapDef
-            {
-                Id = 1, Name = "Noria", MinLevel = 15, Cost = 500, Center = new Vector3(0, 0, 1000f),
-                Ground = new Color(0.2f, 0.42f, 0.22f), Town = new Color(0.55f, 0.5f, 0.38f), Tree = new Color(0.1f, 0.32f, 0.12f), Trunk = new Color(0.32f, 0.22f, 0.12f),
-                Zones = new[]
-                {
-                    Z("Elite Goblin", "Goblin", 15, -22, 18, 8, 1.2f, new Color(0.6f, 1f, 0.6f)),
-                    Z("Forest Orc", "Orc", 22, 24, 20, 7, 1.4f, new Color(0.6f, 0.9f, 0.5f)),
-                    Z("Moss Golem", "Golem", 28, 0, -28, 4, 2.1f, new Color(0.55f, 0.85f, 0.5f)),
-                },
-            },
-            new MapDef
-            {
-                Id = 2, Name = "Devias", MinLevel = 30, Cost = 1500, Center = new Vector3(0, 0, 2000f),
-                Ground = new Color(0.85f, 0.88f, 0.92f), Town = new Color(0.7f, 0.72f, 0.78f), Tree = new Color(0.75f, 0.85f, 0.85f), Trunk = new Color(0.35f, 0.3f, 0.28f),
-                Zones = new[]
-                {
-                    Z("Ice Turtle", "Turtle", 32, -24, 16, 7, 1f, new Color(0.6f, 0.85f, 1f)),
-                    Z("Yeti", "Golem", 38, 24, 18, 5, 2f, new Color(1.2f, 1.2f, 1.25f)),
-                    Z("Orc Warlord", "Orc", 45, 0, -28, 6, 1.6f, new Color(1f, 0.55f, 0.55f)),
-                },
-            },
-            new MapDef
-            {
-                Id = 3, Name = "Lost Tower", MinLevel = 50, Cost = 3000, Center = new Vector3(0, 0, 3000f),
-                Ground = new Color(0.22f, 0.18f, 0.26f), Town = new Color(0.38f, 0.32f, 0.42f), Tree = new Color(0.32f, 0.2f, 0.38f), Trunk = new Color(0.2f, 0.15f, 0.2f),
-                Zones = new[]
-                {
-                    Z("Shadow Goblin", "Goblin", 50, -24, 16, 8, 1.3f, new Color(0.55f, 0.45f, 0.75f)),
-                    Z("Stone Golem", "Golem", 55, 24, 16, 4, 2.3f, new Color(0.6f, 0.6f, 0.75f)),
-                    Z("Death Orc", "Orc", 62, 0, -28, 6, 1.7f, new Color(0.5f, 0.4f, 0.5f)),
-                },
-            },
-            new MapDef
-            {
-                Id = 4, Name = "Atlans", MinLevel = 65, Cost = 5000, Center = new Vector3(0, 0, 4000f),
-                Ground = new Color(0.15f, 0.35f, 0.5f), Town = new Color(0.55f, 0.65f, 0.7f), Tree = new Color(0.2f, 0.55f, 0.55f), Trunk = new Color(0.3f, 0.35f, 0.4f),
-                Zones = new[]
-                {
-                    Z("Sea Slime", "Slime", 65, -24, 16, 8, 1.4f, new Color(0.5f, 0.8f, 1.2f)),
-                    Z("Shell Lord", "Turtle", 72, 24, 16, 6, 1.8f, new Color(0.7f, 0.5f, 1f)),
-                    Z("Coral Golem", "Golem", 78, 0, -28, 4, 2.3f, new Color(1f, 0.6f, 0.6f)),
-                },
-            },
-            new MapDef
-            {
-                Id = 5, Name = "Tarkan", MinLevel = 80, Cost = 8000, Center = new Vector3(0, 0, 5000f),
-                Ground = new Color(0.78f, 0.66f, 0.42f), Town = new Color(0.7f, 0.6f, 0.45f), Tree = new Color(0.45f, 0.55f, 0.25f), Trunk = new Color(0.45f, 0.35f, 0.2f),
-                Zones = new[]
-                {
-                    Z("Sand Orc", "Orc", 82, -24, 16, 7, 1.7f, new Color(1f, 0.85f, 0.55f)),
-                    Z("Desert Golem", "Golem", 88, 24, 16, 4, 2.4f, new Color(1f, 0.8f, 0.5f)),
-                    Z("Tarkan Turtle", "Turtle", 95, 0, -28, 6, 1.9f, new Color(0.9f, 0.7f, 0.4f)),
-                },
-            },
-            new MapDef
-            {
-                Id = 6, Name = "Icarus", MinLevel = 1, MinRebirth = 1, Cost = 12000, Center = new Vector3(0, 0, 6000f),
-                Ground = new Color(0.62f, 0.75f, 0.9f), Town = new Color(0.9f, 0.9f, 0.95f), Tree = new Color(0.95f, 0.95f, 1f), Trunk = new Color(0.7f, 0.7f, 0.8f),
-                Zones = new[]
-                {
-                    Z("Sky Slime", "Slime", 100, -24, 16, 8, 1.5f, new Color(1.2f, 1.2f, 1.3f)),
-                    Z("Phoenix Orc", "Orc", 105, 24, 16, 6, 1.8f, new Color(1.3f, 0.6f, 0.3f)),
-                    Z("Sky Golem", "Golem", 110, 0, -28, 4, 2.5f, new Color(0.9f, 0.95f, 1.3f)),
-                },
-            },
-        };
+        static ZoneDef Z(string name, string model, int lv, float x, float z, int count, float scale, Color? tint = null, float radius = 6f, bool elite = false) =>
+            new ZoneDef { Name = name, Model = model, Level = lv, Offset = new Vector3(x, 0, z), Count = count, Scale = scale,
+                          Radius = elite ? 2.5f : radius, Tint = tint ?? Color.white, Elite = elite };
 
         static readonly Dictionary<int, GameObject> roots = new Dictionary<int, GameObject>();
         static readonly Dictionary<int, List<MonsterSpawner>> zones = new Dictionary<int, List<MonsterSpawner>>();
@@ -143,9 +64,7 @@ namespace MuProto
 
         public static bool CanEnter(PlayerSave d, MapDef m, out string why)
         {
-            why = null;
-            if (d.rebirth < m.MinRebirth) why = "Needs " + m.MinRebirth + " Rebirth";
-            else if (d.rebirth == 0 && d.level < m.MinLevel) why = "Needs Lv " + m.MinLevel;
+            why = GameData.Power(d) < m.MinPower ? "Needs " + m.Requirement : null;
             return why == null;
         }
 
@@ -172,7 +91,8 @@ namespace MuProto
                 foreach (var z in m.Zones)
                 {
                     var s = MonsterSpawner.Create(z.Name, z.Level, m.Center + z.Offset, z.Radius, z.Count,
-                        Color.Lerp(m.Ground, Color.black, 0.25f), z.Scale, true, z.Model, z.Tint);
+                        Color.Lerp(m.Ground, Color.black, 0.25f), z.Scale, !z.Elite, z.Model, z.Tint * m.MonsterTint);
+                    s.Elite = z.Elite;
                     s.Map = m.Id;
                     s.Bounds = m.Bounds;
                     s.transform.SetParent(t, true);
@@ -301,12 +221,12 @@ namespace MuProto
         public static MonsterSpawner BestFor(PlayerSave d)
         {
             MonsterSpawner best = null;
-            int effective = d.rebirth > 0 ? GameData.MaxLevel + d.level : d.level;
+            int effective = GameData.Power(d);
             foreach (var m in All)
             {
                 if (!CanEnter(d, m, out _)) continue;
                 foreach (var z in ZonesOf(m.Id))
-                    if (z.Level <= effective + 2 && (best == null || z.Level > best.Level)) best = z;
+                    if (!z.Elite && z.Level <= effective + 2 && (best == null || z.Level > best.Level)) best = z;
             }
             return best ?? MonsterSpawner.Field[0];
         }
@@ -324,7 +244,8 @@ namespace MuProto
             Vector3 d = p.transform.position - transform.position;
             d.y = 0;
             bool now = d.magnitude < 2.5f;
-            if (now && !near) HUD.Instance.Open("Shop");
+            // Only when you walk up yourself: auto-battle and auto-quest often pass through town.
+            if (now && !near && !p.AutoBattle && p.QuestZone == null) HUD.Instance.Open("Shop");
             near = now;
         }
     }

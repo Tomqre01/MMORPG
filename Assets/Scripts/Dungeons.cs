@@ -110,7 +110,7 @@ namespace MuProto
 
         void Begin(Player p)
         {
-            level = Mathf.Max(1, p.Data.level - 2);
+            level = Mathf.Max(1, GameData.Power(p.Data) - 2);
             spawner = MakeSpawner(level, Center, 10f, 0, ArenaBounds);
             spawner.Died += _ => alive--;
             Monster.AnyHpLost += OnAnyHit;
@@ -242,7 +242,7 @@ namespace MuProto
 
         void Begin(Player p)
         {
-            level = Mathf.Max(1, p.Data.level);
+            level = Mathf.Max(1, GameData.Power(p.Data));
             bridge = MakeSpawner(level, new Vector3(600f, 0, -16f), 3f, 7, BridgeBounds);
             bridge.Died += _ => OnBridgeKill();
 

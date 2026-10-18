@@ -624,7 +624,7 @@ namespace MuProto
             if (tgt != null && !tgt.IsDead)
             {
                 targetFrame.SetActive(true);
-                targetName.text = (tgt.IsBoss ? "<color=#e59bff>BOSS</color>  " : "") + "Lv " + tgt.Level + "  " + tgt.DisplayName;
+                targetName.text = (tgt.IsBoss ? "<color=#e59bff>BOSS</color>  " : "") + GameData.LevelLabel(tgt.Level) + "  " + tgt.DisplayName;
                 UIB.SetBar(targetFill, (float)tgt.Hp / tgt.MaxHp);
                 targetHp.text = tgt.Hp.ToString("N0") + " / " + tgt.MaxHp.ToString("N0");
             }
