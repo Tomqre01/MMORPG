@@ -13,14 +13,17 @@
 อัปเลเวลสกิลได้ที่หน้าต่าง **Char** (ใช้ Zen) สกิลละสูงสุด Lv20 ดาเมจเพิ่ม 6% ต่อเลเวล
 
 ## 2. เลเวล สเตตัส และ Rebirth
-- เลเวลตันที่ **100** ทุกเลเวลได้ **5 แต้ม** ลง STR / AGI / VIT / ENE เองที่หน้าต่าง Char หรือกด **Auto Add**
+- เลเวลตันที่ **100** ทุกเลเวลได้ **5 แต้ม** (เพิ่มอีก 1 แต้มต่อจุติ: 6, 7, 8... ตาม ZhuanShengAddPoint.xml) ลง STR / AGI / VIT / ENE เองที่หน้าต่าง Char หรือกด **Auto Add**
   - STR: ATK (Dark Knight มากสุด) · AGI: ATK ของ Elf, DEF และความเร็วตี · VIT: HP · ENE: ATK ของ Dark Wizard และเพิ่มดาเมจสกิลคลาสอื่นเล็กน้อย
 - ชุดและอาวุธต้องมี **สเตตัสหลักของคลาส** ถึงเกณฑ์ (ดูช่องในกระเป๋า ช่องสีแดง = ใส่ไม่ได้ และบอกเหตุผลตอนแตะ)
-- **Rebirth**: เลเวล 100 แล้วจะเริ่มเควสต์จุติ ล่ามอน Lv50 ขึ้นไป 100 ตัว และจ่าย Zen (20,000 × (R+1))
-  จุติแล้วกลับเป็น Lv1 เก็บสเตตัสเดิม ได้แต้มโบนัส 50 แต้ม HP +200 และใส่ของ Tier ถัดไปได้
+- **Rebirth**: เลเวล 100 แล้วจะเริ่มเควสต์จุติ ล่ามอน Lv50 ขึ้นไป 100 ตัว และจ่าย Zen ตาม ZhuanSheng.xml ÷ 100
+  (จุติ 1 ฟรี, 2 = 20,000, 3 = 40,000, 4 = 80,000 ... 10 = 770,000)
+  จุติแล้วกลับเป็น Lv1 เก็บสเตตัสเดิม ได้แต้มโบนัส 100 / 120 / 140 ... แต้ม HP +200 และใส่ของ Tier ถัดไปได้
 
 ## 3. อุปกรณ์ ตีบวก และปีก
-- ของแบ่ง **Tier 1-6** (Bronze, Silver, Dragon, Black Dragon, Great Dragon, Dark Phoenix) Tier N ต้อง Rebirth อย่างน้อย N-1
+- ของแบ่ง **Tier 1-6** ชื่อไทยตามเซิร์ฟเวอร์ (Goods.xml) แยกคลาส เช่น Dark Knight: หนัง → หยก → ทอง → ทองคำขาว → ราชามังกร → จ้าวมังกรดำ,
+  Dark Wizard: หนังสัตว์ → กระดูก → ราชาปีศาจ → แสงดาว → ในตำนาน → จันทร์ลวง, Elf: เถาวัลย์ → ไหมสวรรค์ → วายุ → ภูต → เทพธิดา → เงาหยก
+  Tier N ต้อง Rebirth อย่างน้อย N-1
   มอนดรอปของ Tier ตามขั้น Rebirth ของเรา ส่วนใหญ่เป็นของคลาสตัวเอง
 - ความหายาก: Normal (ขาว), **Excellent** (เขียว ×1.6), **Ancient** (ทอง ×2.5)
 - ตีบวกที่กระเป๋า (ปุ่ม Bag ช่องอุปกรณ์ที่สวมอยู่):
@@ -61,18 +64,21 @@
   - ในเมือง Lorencia (วงหินกลางแมพ) ตีกันไม่ได้ มอนไม่ตามเข้า และฟื้นเลือดเร็ว
 
 ## 6. แผนที่และวาร์ป
-ปุ่ม **Map** วาร์ปได้ 7 แผนที่ (เสีย Zen ตามแผนที่) แต่ละแผนที่มีเมืองปลอดภัยตรงกลางและพ่อค้า (เดินเข้าไปใกล้จะเปิดร้าน)
-ทุกแผนที่อยู่ในฉากเดียวกัน ห่างกัน 1000 หน่วย เฉพาะแผนที่ที่อยู่จึงมีมอน
+ปุ่ม **Teleport** วาร์ปได้ 10 แผนที่ตามเซิร์ฟเวอร์ (เสีย Zen ตามแผนที่) แต่ละแผนที่มีเมืองปลอดภัยตรงกลางและพ่อค้า
+มอนแต่ละแผนที่ ชื่อไทย เลเวล และตำแหน่งดึงมาจาก D:\MU_Server7\Config (ดูหัวข้อ "Maps and monsters from the MU Origin server data" ท้ายไฟล์)
 
-| แผนที่ | เข้าได้ | มอน |
-|---|---|---|
-| Lorencia | Lv1 | Slime 1, Turtle 3, Goblin 5, Orc 10, Golem 20 + ลานบอสโลก |
-| Noria | Lv15 | Elite Goblin 15, Forest Orc 22, Moss Golem 28 |
-| Devias | Lv30 | Ice Turtle 32, Yeti 38, Orc Warlord 45 |
-| Lost Tower | Lv50 | Shadow Goblin 50, Stone Golem 55, Death Orc 62 |
-| Atlans | Lv65 | Sea Slime 65, Shell Lord 72, Coral Golem 78 |
-| Tarkan | Lv80 | Sand Orc 82, Desert Golem 88, Tarkan Turtle 95 |
-| Icarus | 1 Rebirth | Sky Slime 100, Phoenix Orc 105, Sky Golem 110 |
+| แผนที่ | เข้าได้ |
+|---|---|
+| Lorencia | Lv1 |
+| Noria | Lv20 |
+| Devias | Lv40 |
+| Dungeon | Lv65 |
+| Lost Tower | Lv85 |
+| Atlans | 2R Lv85 |
+| Tarkan | 3R Lv88 |
+| Icarus | 3R Lv85 |
+| Aida | 5R Lv88 |
+| Kanturu Ruins | 6R Lv88 |
 
 Auto-Quest วาร์ปไปแผนที่ของเควสต์ให้เองฟรี
 
@@ -140,6 +146,8 @@ saves screenshots of the HUD and the main windows to `Assets/UIShots` (ignored b
 - **Monsters per map:** each normal monster type (MonsterType 101) becomes a zone with its Thai name (`SName`) and level.
   The zone sits where that type spawns on the server, measured from the town (`MapConfig.xml` birth point) and scaled to the 96 m map.
 - **Elites** (`ชั้นยอด·`, MonsterType 301) are single boss-strength monsters that respawn after a minute and pay boss rewards.
+- **Also from the server:** Thai gear names per class and tier (`GearData.cs`, from `Goods.xml` via `gen_items.py`), Thai wing names (`Wing/Wing_N.xml`, levels 1/4/7/10),
+  rebirth points and costs (`Roles/ZhuanSheng*.xml`), and Blood Castle at 3 runs a day and 8 minutes (`BloodCastleInfo.xml`).
 - **Left out:** golden monsters, event monsters and the Lv 200 field bosses (Golden Invasion and the World Boss cover those).
 - **Power** (`GameData.Power`) puts rebirth and level on one scale like the server's ZhuanSheng + Level:
   - Lv 90 is 90, and 3 Rebirth Lv 92 is 392.

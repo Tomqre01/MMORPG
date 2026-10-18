@@ -1,0 +1,57 @@
+namespace MuProto
+{
+    // Thai gear names per class, slot and tier from the MU Origin server config (Goods.xml):
+    // tier 1 = SuitID 1 (หนัง / หนังสัตว์ / เถาวัลย์) ... tier 6 = SuitID 6.
+    // Regenerate with Tools/ServerImport/gen_items.py.
+    public static partial class GameData
+    {
+        static readonly System.Collections.Generic.Dictionary<string, string[]> ServerGear = new System.Collections.Generic.Dictionary<string, string[]>
+        {
+            ["DarkKnight/Weapon"] = new[] { "กระบี่ยาว", "ดาบดวงจันทร์", "ดาบออโรรา", "มีดตัดจันทร์", "กระบี่แดงแท้", "กระบี่เทพสายฟ้า" },
+            ["DarkKnight/Armor"] = new[] { "ชุดเกราะหนัง", "เกราะหยก", "ชุดเกราะทอง", "ชุดเกราะทองคำขาว", "เกราะราชามังกร", "ชุดจ้าวมังกรดำ" },
+            ["DarkKnight/Helm"] = new[] { "หมวกหนัง", "หมวกหยก", "หมวกทอง", "หมวกทองคำขาว", "หมวกราชามังกร", "หมวกจ้าวมังกรดำ" },
+            ["DarkKnight/Boots"] = new[] { "รองเท้าหนัง", "รองเท้าหยก", "รองเท้าทอง", "รองเท้าทองคำขาว", "รองเท้าราชามังกร", "รองเท้าจ้าวมังกรดำ" },
+            ["DarkKnight/Gloves"] = new[] { "สนับมือหนัง", "สนับมือหยก", "สนับมือทอง", "สนับมือทองคำขาว", "สนับมือจ้าวมังกร", "สนับมือจ้าวมังกรดำ" },
+            ["DarkKnight/Pants"] = new[] { "สนับขาหนัง", "สนับขาหยก", "สนับขาทอง", "สนับขาทองคำขาว", "สนับขาจ้าวมังกร", "สนับขาจ้าวมังกรดำ" },
+            ["DarkKnight/Necklace"] = new[] { "สร้อยหนัง", "สร้อยหยก", "สร้อยทอง", "สร้อยทองคำขาว", "สร้อยจ้าวมังกร", "สร้อยจ้าวมังกรดำ" },
+            ["DarkKnight/Ring"] = new[] { "แหวนหนัง", "แหวนหยก", "แหวนทอง", "แหวนทองคำขาว", "แหวนจ้าวมังกร", "แหวนจ้าวมังกรดำ" },
+            ["DarkWizard/Weapon"] = new[] { "คทากระดูก", "คทาขนนกขาว", "คทาราชาปีศาจ", "คทาแสงดาว", "คทาในตำนาน", "คทาสายฟ้าจันทร์ลวง" },
+            ["DarkWizard/Armor"] = new[] { "ชุดเกราะหนังสัตว์", "ชุดเกราะกระดูก", "ชุดเกราะราชาปีศาจ", "ชุดเกราะแสงดาว", "ชุดเกราะในตำนาน", "ชุดเกราะจันทร์ลวง" },
+            ["DarkWizard/Helm"] = new[] { "หมวกหนังสัตว์", "หมวกกระดูก", "หมวกราชาปีศาจ", "หมวกแสงดาว", "หมวกในตำนาน", "หมวกจันทร์ลวง" },
+            ["DarkWizard/Boots"] = new[] { "รองเท้าหนังสัตว์", "รองเท้ากระดูก", "รองเท้าราชาปีศาจ", "รองเท้าแสงดาว", "รองเท้าในตำนาน", "รองเท้าจันทร์ลวง" },
+            ["DarkWizard/Gloves"] = new[] { "สนับมือหนังสัตว์", "สนับมือกระดูก", "สนับมือราชาปีศาจ", "สนับมือแสงดาว", "สนับมือในตำนาน", "สนับมือจันทร์ลวง" },
+            ["DarkWizard/Pants"] = new[] { "สนับขาหนังสัตว์", "สนับขากระดูก", "สนับขาราชาปีศาจ", "สนับขาแสงดาว", "สนับขาในตำนาน", "สนับขาจันทร์ลวง" },
+            ["DarkWizard/Necklace"] = new[] { "สร้อยหนังสัตว์", "สร้อยกระดูก", "สร้อยราชาปีศาจ", "สร้อยแสงดาว", "สร้อยในตำนาน", "สร้อยจันทร์ลวง" },
+            ["DarkWizard/Ring"] = new[] { "แหวนหนังสัตว์", "แหวนกระดูก", "แหวนราชาปีศาจ", "แหวนแสงดาว", "แหวนในตำนาน", "แหวนจันทร์ลวง" },
+            ["Elf/Weapon"] = new[] { "ธนูเถาวัลย์", "ธนูไหมสวรรค์", "ธนูวายุ", "ธนูภูต", "ธนูเทพธิดา", "ธนูเงาหยก" },
+            ["Elf/Armor"] = new[] { "ชุดเกราะเถาวัลย์", "ชุดเกราะไหมสวรรค์", "ชุดเกราะวายุ", "ชุดเกราะภูต", "ชุดเกราะเทพธิดา", "ชุดเกราะเงาหยก" },
+            ["Elf/Helm"] = new[] { "หมวกเถาวัลย์", "หมวกไหมสวรรค์", "หมวกวายุ", "หมวกภูต", "หมวกเทพธิดา", "หมวกเงาหยก" },
+            ["Elf/Boots"] = new[] { "รองเท้าเถาวัลย์", "รองเท้าไหมสวรรค์", "รองเท้าวายุ", "รองเท้าภูต", "รองเท้าเทพธิดา", "รองเท้าเงาหยก" },
+            ["Elf/Gloves"] = new[] { "สนับมือเถาวัลย์", "สนับมือไหมสวรรค์", "สนับมือวายุ", "สนับมือภูต", "สนับมือเทพธิดา", "สนับมือเงาหยก" },
+            ["Elf/Pants"] = new[] { "สนับขาเถาวัลย์", "สนับขาไหมสวรรค์", "สนับขาวายุ", "สนับขาภูต", "สนับขาเทพธิดา", "สนับขาเงาหยก" },
+            ["Elf/Necklace"] = new[] { "สร้อยเถาวัลย์", "สร้อยไหมสวรรค์", "สร้อยวายุ", "สร้อยภูต", "สร้อยเทพธิดา", "สร้อยเงาหยก" },
+            ["Elf/Ring"] = new[] { "แหวนเถาวัลย์", "แหวนไหมสวรรค์", "แหวนวายุ", "แหวนภูต", "แหวนเทพธิดา", "แหวนเงาหยก" },
+        };
+
+        // Gear saved before the server names keeps its stats but takes the new name.
+        public static void RenameGear(PlayerSave s)
+        {
+            if (string.IsNullOrEmpty(s.classId)) return;
+            void Fix(Item it)
+            {
+                if (it == null || it.IsEmpty) return;
+                string prefix = it.rarity == Rarity.Epic ? "Ancient " : it.rarity == Rarity.Rare ? "Excellent " : "";
+                it.name = prefix + GearName(string.IsNullOrEmpty(it.classId) ? s.classId : it.classId, it.slot, it.tier);
+            }
+            if (s.equipped != null) foreach (var it in s.equipped) Fix(it);
+            if (s.bag != null) foreach (var it in s.bag) Fix(it);
+        }
+
+        public static string GearName(string classId, Slot slot, int tier)
+        {
+            if (ServerGear.TryGetValue(classId + "/" + slot, out var names))
+                return names[UnityEngine.Mathf.Clamp(tier - 1, 0, names.Length - 1)];
+            return TierName(tier) + " " + slot;
+        }
+    }
+}

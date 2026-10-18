@@ -147,7 +147,7 @@ namespace MuProto
                 StrAtk = 1.5f, AgiAtk = 0.25f, EneAtk = 0f, BaseHp = 120, HpPerVit = 10, HpPerLevel = 8, DefMul = 1.2f,
                 AttackRange = 2.2f, AttackInterval = 0.6f, MainStat = "STR",
                 Weapon = "Sword", Armor = "Armor", Helm = "Helm",
-                Wings = new[] { "Wings of Satan", "Wings of Dragon", "Wings of Doom", "Wings of Conqueror" },
+                Wings = new[] { "ปีกมารร้าย", "ปีกมังกรเหิน", "ปีกลมพายุ", "ปีกเงาปีศาจ" },   // server Wing_0.xml levels 1, 4, 7, 10
                 BodyColor = new Color(0.25f, 0.45f, 0.95f),
                 Skills = new[]
                 {
@@ -163,7 +163,7 @@ namespace MuProto
                 StrAtk = 0.2f, AgiAtk = 0.1f, EneAtk = 1.7f, BaseHp = 90, HpPerVit = 6, HpPerLevel = 5, DefMul = 0.8f,
                 AttackRange = 9f, AttackInterval = 0.9f, Ranged = true, MainStat = "ENE",
                 Weapon = "Staff", Armor = "Robe", Helm = "Hood",
-                Wings = new[] { "Wings of Heaven", "Wings of Soul", "Wings of Despair", "Wings of Eternal" },
+                Wings = new[] { "ปีกฑูตสวรรค์", "ปีกวิญญาณมาร", "ปีกกาลเวลา", "ปีกแสงสะท้อน" },  // Wing_1.xml
                 BodyColor = new Color(0.6f, 0.3f, 0.9f),
                 Skills = new[]
                 {
@@ -179,7 +179,7 @@ namespace MuProto
                 StrAtk = 0.5f, AgiAtk = 1.1f, EneAtk = 0f, BaseHp = 100, HpPerVit = 8, HpPerLevel = 6, DefMul = 1f,
                 AttackRange = 8f, AttackInterval = 0.45f, Ranged = true, MoveBonus = 0.5f, MainStat = "AGI",
                 Weapon = "Bow", Armor = "Vest", Helm = "Circlet",
-                Wings = new[] { "Wings of Fairy", "Wings of Spirit", "Wings of Illusion", "Wings of Mystery" },
+                Wings = new[] { "ปีกแห่งภูติ", "ปีกจิตบริสุทธิ์", "ปีกเงามายา", "ปีกเทพธิดา" },  // Wing_2.xml
                 BodyColor = new Color(0.25f, 0.7f, 0.35f),
                 Skills = new[]
                 {
@@ -206,7 +206,7 @@ namespace MuProto
         public const int WingLevelsPerTier = 10;
         public const int MaxPet = 50;
         public const int PetAdoptCost = 200;
-        public const int BloodCastleRuns = 2;
+        public const int BloodCastleRuns = 3;   // server BloodCastleInfo MaxEnter
         public const int DevilSquareRuns = 2;
         public const float PotionHeal = 0.35f;
 
@@ -245,7 +245,7 @@ namespace MuProto
         }
     }
 
-    public static class GameData
+    public static partial class GameData
     {
         public const int SaveVersion = 2;
         public const int EquipSlots = 9;
@@ -256,15 +256,19 @@ namespace MuProto
         public const int MaxLevel = 100;
         public const int MaxRebirth = 10;
         public const int MaxTier = 6;
-        public const int PointsPerLevel = 5;
-        public const int RebirthBonusPoints = 50;
+        // From the server's Roles/ZhuanShengAddPoint.xml and Roles/ZhuanSheng.xml: stat points per level
+        // grow by one each rebirth (5, 6, 7...), each rebirth pays 100, 120, 140... points, and the Zen cost
+        // follows the server's NeedJinBi divided by 100 to fit this game's economy.
+        public static int PointsPerLevel(int rebirth) => 5 + rebirth;
+        public static int RebirthBonus(int newRebirth) => 80 + 20 * newRebirth;
+        static readonly int[] RebirthCost = { 0, 20000, 40000, 80000, 120000, 180000, 270000, 370000, 570000, 770000 };
         public const int RebirthKillsNeeded = 100;
         public const int RebirthKillMinLevel = 50;
         public const float TownRadius = 6f;
 
         static readonly string[] TierNames = { "Bronze", "Silver", "Dragon", "Black Dragon", "Great Dragon", "Dark Phoenix" };
 
-        public static int RebirthGold(int rebirth) => 20000 * (rebirth + 1);
+        public static int RebirthGold(int rebirth) => RebirthCost[Mathf.Clamp(rebirth, 0, RebirthCost.Length - 1)];
         public static int ExpToNext(int level, int rebirth) => Mathf.RoundToInt((20 + level * level * 8) * (1f + 0.25f * rebirth));
 
         // "Power" puts rebirth and level on one scale, like the MU Origin server data (ZhuanSheng + Level):
@@ -309,12 +313,11 @@ namespace MuProto
                 case Slot.Ring: baseValue = 20 + level * 8f; break;
                 default: baseValue = 2 + level * 1.5f; break;
             }
-            string piece = slot == Slot.Weapon ? cls.Weapon : slot == Slot.Armor ? cls.Armor : slot == Slot.Helm ? cls.Helm : slot.ToString();
             bool jewelry = slot == Slot.Necklace || slot == Slot.Ring;
             string prefix = rarity == Rarity.Epic ? "Ancient " : rarity == Rarity.Rare ? "Excellent " : "";
             var item = new Item
             {
-                name = prefix + (jewelry ? JewelryName(slot, tier) : TierName(tier) + " " + piece),
+                name = prefix + GearName(cls.Id, slot, tier),
                 slot = slot,
                 rarity = rarity,
                 level = level,
@@ -341,14 +344,6 @@ namespace MuProto
                 item.sockets = new int[2];
             }
             return item;
-        }
-
-        static string JewelryName(Slot slot, int tier)
-        {
-            string[] neck = { "Pendant of Lightning", "Pendant of Fire", "Pendant of Ice", "Pendant of Wind", "Pendant of Water", "Pendant of Ability" };
-            string[] ring = { "Ring of Ice", "Ring of Poison", "Ring of Fire", "Ring of Earth", "Ring of Wind", "Ring of Magic" };
-            int i = Mathf.Clamp(tier - 1, 0, 5);
-            return slot == Slot.Necklace ? neck[i] : ring[i];
         }
 
         // One Ancient set per class: more pieces worn, bigger bonus.
@@ -402,7 +397,8 @@ namespace MuProto
         {
             s.classId = c.Id;
             s.str = c.BaseStr; s.agi = c.BaseAgi; s.vit = c.BaseVit; s.ene = c.BaseEne;
-            s.freePoints = (s.level - 1) * PointsPerLevel + s.rebirth * RebirthBonusPoints;
+            s.freePoints = (s.level - 1) * PointsPerLevel(s.rebirth);
+            for (int r = 1; r <= s.rebirth; r++) s.freePoints += RebirthBonus(r);
             s.equipped[(int)Slot.Weapon] = MakeItem(Slot.Weapon, Rarity.Common, 1, 1, c.Id);
         }
     }
@@ -420,6 +416,7 @@ namespace MuProto
             // Saves from before the MU classic rework (no version) start over, as agreed.
             if (save == null || save.version != GameData.SaveVersion) return GameData.NewSave();
             save.EnsureSlots();
+            GameData.RenameGear(save);
             return save;
         }
 

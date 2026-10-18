@@ -478,7 +478,7 @@ namespace MuProto
                        "    Speed " + p.MoveSpeed.ToString("0.0") + "\n\n" +
                        "Skills: " + SkillLine(p, 0) + "   " + SkillLine(p, 1) + "   " + SkillLine(p, 2) + "\n\n" +
                        "Rebirth: " + (p.RebirthBlocker() ?? "Ready! Costs " + GameData.RebirthGold(d.rebirth) + "g") + "\n" +
-                       "Each rebirth: back to Lv 1, keep stats, +" + GameData.RebirthBonusPoints + " points, next gear Tier.";
+                       "Next rebirth: back to Lv 1, keep stats, +" + GameData.RebirthBonus(d.rebirth + 1) + " points, " + GameData.PointsPerLevel(d.rebirth + 1) + " points per level, next gear Tier.";
             });
             foreach (var stat in new[] { "STR", "AGI", "VIT", "ENE" })
                 character.AddButton(() => stat + " +1", () => { Player.Instance.AddStat(stat, 1); return null; }, new Color(0.25f, 0.35f, 0.55f));
@@ -546,7 +546,7 @@ namespace MuProto
             {
                 var p = Player.Instance;
                 return "Blood Castle   (" + p.BloodCastleLeft + "/" + Upgrades.BloodCastleRuns + " left today)\n" +
-                       "5 minutes: clear the bridge, break the Castle Gate, destroy the Statue of Saint,\n" +
+                       "8 minutes: clear the bridge, break the Castle Gate, destroy the Statue of Saint,\n" +
                        "then bring the Archangel's Weapon back to the Archangel. Lots of EXP and Jewels.\n\n" +
                        "Devil Square   (" + p.DevilSquareLeft + "/" + Upgrades.DevilSquareRuns + " left today)\n" +
                        "Survive " + DevilSquare.Waves + " waves for 2:30. The more damage you deal, the more EXP and Zen.\n\n" +

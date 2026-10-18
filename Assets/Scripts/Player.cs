@@ -824,7 +824,7 @@ namespace MuProto
             {
                 Data.exp -= GameData.ExpToNext(Data.level, Data.rebirth);
                 Data.level++;
-                Data.freePoints += GameData.PointsPerLevel;
+                Data.freePoints += GameData.PointsPerLevel(Data.rebirth);
                 up = true;
             }
             if (Data.level >= GameData.MaxLevel) Data.exp = 0;
@@ -904,14 +904,15 @@ namespace MuProto
             Data.level = 1;
             Data.exp = 0;
             Data.rebirthKills = 0;
-            Data.freePoints += GameData.RebirthBonusPoints;
+            int bonus = GameData.RebirthBonus(Data.rebirth);
+            Data.freePoints += bonus;
             Hp = MaxHp;
             Effect.Ring(transform.position, 6f, new Color(1f, 0.9f, 0.4f));
             Effect.Ring(transform.position, 3f, Color.white);
             FloatingText.Spawn(transform.position + Vector3.up * 3f, "REBIRTH " + Data.rebirth + "R!", new Color(1f, 0.85f, 0.3f), 60);
             Quests.Check(this);
             Commit();
-            return "Rebirth " + Data.rebirth + "! +" + GameData.RebirthBonusPoints + " stat points, Tier " + (Data.rebirth + 1) + " gear unlocked";
+            return "Rebirth " + Data.rebirth + "! +" + bonus + " stat points, Tier " + (Data.rebirth + 1) + " gear unlocked";
         }
 
         // ---- Items ----
