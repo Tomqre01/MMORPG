@@ -33,6 +33,20 @@ namespace MuProto
             ["Elf/Ring"] = new[] { "แหวนเถาวัลย์", "แหวนไหมสวรรค์", "แหวนวายุ", "แหวนภูต", "แหวนเทพธิดา", "แหวนเงาหยก" },
         };
 
+        // Gear saved before the server names keeps its stats but takes the new name.
+        public static void RenameGear(PlayerSave s)
+        {
+            if (string.IsNullOrEmpty(s.classId)) return;
+            void Fix(Item it)
+            {
+                if (it == null || it.IsEmpty) return;
+                string prefix = it.rarity == Rarity.Epic ? "Ancient " : it.rarity == Rarity.Rare ? "Excellent " : "";
+                it.name = prefix + GearName(string.IsNullOrEmpty(it.classId) ? s.classId : it.classId, it.slot, it.tier);
+            }
+            if (s.equipped != null) foreach (var it in s.equipped) Fix(it);
+            if (s.bag != null) foreach (var it in s.bag) Fix(it);
+        }
+
         public static string GearName(string classId, Slot slot, int tier)
         {
             if (ServerGear.TryGetValue(classId + "/" + slot, out var names))

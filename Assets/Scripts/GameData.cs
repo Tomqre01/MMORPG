@@ -416,6 +416,7 @@ namespace MuProto
             // Saves from before the MU classic rework (no version) start over, as agreed.
             if (save == null || save.version != GameData.SaveVersion) return GameData.NewSave();
             save.EnsureSlots();
+            GameData.RenameGear(save);
             return save;
         }
 
