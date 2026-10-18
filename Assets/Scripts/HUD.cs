@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace MuProto
 {
-    public class HUD : MonoBehaviour
+    public partial class HUD : MonoBehaviour
     {
         public static HUD Instance { get; private set; }
         public RectTransform FxLayer { get; private set; }
@@ -67,6 +67,7 @@ namespace MuProto
                 case "Wings": wingsPanel.Show(); break;
                 case "Pet": petPanel.Show(); break;
                 case "Dungeon": dungeonPanel.Show(); break;
+                default: OpenExtra(name); break;
             }
         }
 
@@ -104,7 +105,7 @@ namespace MuProto
             bossText.color = new Color(0.9f, 0.65f, 1f);
             stateText = UIB.Label(root, "", 24, tl, new Vector2(24, -378), new Vector2(560, 70), TextAnchor.UpperLeft);
 
-            centerText = UIB.Label(root, "", 44, new Vector2(0.5f, 1), new Vector2(0, -190), new Vector2(1300, 140), TextAnchor.MiddleCenter);
+            centerText = UIB.Label(root, "", 44, new Vector2(0.5f, 1), new Vector2(0, -330), new Vector2(1300, 140), TextAnchor.MiddleCenter);
 
             // Joystick, bottom left.
             var stickBg = UIB.Rect("Joystick", root, Vector2.zero, new Vector2(240, 240), new Vector2(300, 300), center);
@@ -163,13 +164,14 @@ namespace MuProto
                 else dungeonPanel.Toggle();
             }, null, 26);
             dungeonButtonText = dungeonButton.GetComponentInChildren<Text>();
-            dungeonText = UIB.Label(root, "", 34, new Vector2(0.5f, 1), new Vector2(0, -130), new Vector2(1000, 90), TextAnchor.MiddleCenter);
+            dungeonText = UIB.Label(root, "", 34, new Vector2(0.5f, 1), new Vector2(0, -225), new Vector2(1000, 90), TextAnchor.MiddleCenter);
 
             inventory = new InventoryUI(root);
             BuildCharacter(root);
             BuildWings(root);
             BuildPet(root);
             BuildDungeons(root);
+            BuildExtra(root);
             BuildClassSelect(root);
         }
 
@@ -305,7 +307,7 @@ namespace MuProto
             UIB.SetBar(hpFill, (float)p.Hp / p.MaxHp);
             hpText.text = p.Hp + " / " + p.MaxHp;
             UIB.SetBar(expFill, max ? 1f : (float)d.exp / need);
-            goldText.text = "Zen " + d.gold + "     EXP " + (max ? "MAX" : d.exp + "/" + need) + "\n" +
+            goldText.text = "Zen " + d.gold + "   Diamond " + d.diamonds + "   EXP " + (max ? "MAX" : d.exp + "/" + need) + "\n" +
                             "Bless " + d.jewelBless + "   Soul " + d.jewelSoul + "   Feather " + d.feathers + "   Flame " + d.flames;
             classSelect.SetActive(!p.HasClass);
             for (int i = 0; i < 3; i++)
@@ -330,6 +332,7 @@ namespace MuProto
             pkButton.GetComponentInChildren<Text>().text = p.PkMode ? "PK" : "Peace";
             centerText.text = p.IsDead ? "Defeated. Respawn in " + Mathf.CeilToInt(p.RespawnIn)
                 : Time.time < messageUntil ? message : "";
+            UpdateExtra(p);
         }
     }
 
@@ -474,18 +477,18 @@ namespace MuProto
             UIB.Image(panel, new Color(0.08f, 0.08f, 0.12f, 0.96f));
             UIB.Label(panel, "Equipment", 36, tl, new Vector2(30, -20), new Vector2(640, 50));
             UIB.Label(panel, "Bag (tap to equip)", 36, tl, new Vector2(720, -20), new Vector2(740, 50));
-            equipRoot = UIB.Rect("Equipped", panel, tl, new Vector2(30, -80), new Vector2(660, 560));
+            equipRoot = UIB.Rect("Equipped", panel, tl, new Vector2(30, -80), new Vector2(660, 630));
             bagRoot = UIB.Rect("Bag", panel, tl, new Vector2(720, -80), new Vector2(750, 640));
-            info = UIB.Label(panel, "", 26, tl, new Vector2(30, -650), new Vector2(660, 110), TextAnchor.UpperLeft);
+            info = UIB.Label(panel, "", 24, tl, new Vector2(30, -715), new Vector2(660, 60), TextAnchor.UpperLeft);
             info.horizontalOverflow = HorizontalWrapMode.Wrap;
 
             var bl = new Vector2(0, 0);
             UIB.Button(panel, "Sell Junk", bl, new Vector2(30, 30), new Vector2(220, 80), new Color(0.6f, 0.45f, 0.15f),
                 () => info.text = "Sold " + Player.Instance.SellCommons() + " items (kept Excellent/Ancient gear you can wear)", null, 26);
-            UIB.Button(panel, "Buy 10 Potions", bl, new Vector2(270, 30), new Vector2(260, 80), new Color(0.6f, 0.2f, 0.25f),
-                () => info.text = Player.Instance.BuyPotions(10), null, 26);
-            UIB.Button(panel, "Buy 50", bl, new Vector2(550, 30), new Vector2(160, 80), new Color(0.6f, 0.2f, 0.25f),
-                () => info.text = Player.Instance.BuyPotions(50), null, 26);
+            UIB.Button(panel, "Gems", bl, new Vector2(270, 30), new Vector2(200, 80), new Color(0.2f, 0.45f, 0.6f),
+                () => HUD.Instance.Open("Gems"), null, 26);
+            UIB.Button(panel, "Chaos Machine", bl, new Vector2(490, 30), new Vector2(220, 80), new Color(0.5f, 0.2f, 0.5f),
+                () => HUD.Instance.Open("Chaos"), null, 24);
             UIB.Button(panel, "Reset Save", bl, new Vector2(730, 30), new Vector2(220, 80), new Color(0.45f, 0.15f, 0.15f),
                 () => { Player.Instance.ResetSave(); info.text = "Save reset"; }, null, 26);
             UIB.Button(panel, "Close", new Vector2(1, 0), new Vector2(-30, 30), new Vector2(200, 80), new Color(0.3f, 0.3f, 0.35f), Toggle);
@@ -515,22 +518,22 @@ namespace MuProto
             var p = Player.Instance;
             var tl = new Vector2(0, 1);
 
-            for (int s = 0; s < 4; s++)
+            for (int s = 0; s < GameData.EquipSlots; s++)
             {
-                var slot = (Slot)s;
+                int index = s;
+                var slot = GameData.SlotAt(s);
                 var it = p.Data.equipped[s];
-                var row = UIB.Rect("Slot", equipRoot, tl, new Vector2(0, -s * 138), new Vector2(660, 126));
+                var row = UIB.Rect("Slot", equipRoot, tl, new Vector2(0, -s * 70), new Vector2(660, 66));
                 UIB.Image(row, new Color(1, 1, 1, 0.06f));
-                string desc = it.IsEmpty ? slot + ": empty"
-                    : it.Label + "\nTier " + it.tier + "  Lv" + it.level + "   " + it.StatName + " " + it.Stat;
-                var label = UIB.Label(row, desc, 25, tl, new Vector2(16, -8), new Vector2(400, 110), TextAnchor.UpperLeft);
+                string desc = it.IsEmpty ? slot + ": empty" : it.Label + "   " + it.StatName + " " + it.Stat + "   T" + it.tier + "\n<size=17>" + Extras(it) + "</size>";
+                var label = UIB.Label(row, desc, 21, tl, new Vector2(12, -4), new Vector2(470, 60), TextAnchor.UpperLeft);
                 if (!it.IsEmpty) label.color = GameData.RarityColor(it.rarity);
                 if (it.CanEnhance)
                 {
-                    string jewel = it.UsesSoul ? "Soul  " + Mathf.RoundToInt(it.EnhanceChance * 100) + "%" : "Bless  100%";
-                    UIB.Button(row, "+" + (it.plus + 1) + " with\n" + jewel + "\n" + it.EnhanceGold + "g",
-                        new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(220, 112), it.UsesSoul ? new Color(0.55f, 0.2f, 0.4f) : new Color(0.35f, 0.25f, 0.55f),
-                        () => info.text = p.Enhance(slot), null, 22);
+                    string jewel = it.UsesSoul ? "Soul " + Mathf.RoundToInt(it.EnhanceChance * 100) + "%" : "Bless";
+                    UIB.Button(row, "+" + (it.plus + 1) + " " + jewel + "\n" + it.EnhanceGold + "g",
+                        new Vector2(1, 0.5f), new Vector2(-6, 0), new Vector2(170, 60), it.UsesSoul ? new Color(0.55f, 0.2f, 0.4f) : new Color(0.35f, 0.25f, 0.55f),
+                        () => info.text = p.Enhance(index), null, 19);
                 }
             }
 
@@ -541,6 +544,8 @@ namespace MuProto
                 int idx = i;
                 var it = p.Data.bag[i];
                 var current = p.Data.equipped[(int)it.slot];
+                if (it.slot == Slot.Ring && !p.Data.equipped[GameData.Ring2Index].IsEmpty && p.Data.equipped[GameData.Ring2Index].Stat < current.Stat)
+                    current = p.Data.equipped[GameData.Ring2Index];
                 bool usable = p.CanEquip(it, out string why);
                 bool better = usable && (current.IsEmpty || it.Stat > current.Stat);
                 string text = (it.plus > 0 ? "+" + it.plus + " " : "") + it.name.Replace(" ", "\n") + "\nT" + it.tier + " " + it.StatName + " " + it.Stat;
@@ -549,6 +554,21 @@ namespace MuProto
                     () => info.text = p.Equip(idx), null, 15);
                 b.GetComponentInChildren<Text>().color = GameData.RarityColor(it.rarity);
             }
+        }
+
+        // Excellent options, set name and sockets in one short line.
+        public static string Extras(Item it)
+        {
+            var parts = new List<string>();
+            if (it.opts != null) foreach (int o in it.opts) parts.Add(GameData.OptName((ExOpt)o));
+            if (!string.IsNullOrEmpty(it.set)) parts.Add("Set " + it.set);
+            if (it.SocketCount > 0)
+            {
+                var g = new List<string>();
+                foreach (int c in it.sockets) g.Add(GameData.GemName(c));
+                parts.Add("Sockets: " + string.Join(", ", g));
+            }
+            return string.Join(" | ", parts);
         }
 
         static void Clear(Transform t)

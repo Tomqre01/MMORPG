@@ -3,7 +3,13 @@ using UnityEngine;
 
 namespace MuProto
 {
-    public enum Slot { Weapon, Armor, Helm, Boots }
+    // Equipped list index = (int)Slot, plus GameData.Ring2Index for the second ring.
+    public enum Slot { Weapon, Armor, Helm, Boots, Gloves, Pants, Necklace, Ring }
+
+    // Excellent options (green items roll 1-2 of these).
+    public enum ExOpt { None, ExcDamage, AtkPct, DefPct, HpPct, CritRate, ZenDrop, LifeOnKill, DmgReduce, AtkSpeed }
+
+    public enum GemType { None, Ruby, Sapphire, Emerald, Topaz } // ATK, DEF, HP, crit
     public enum Rarity { Common, Rare, Epic } // shown as Normal, Excellent, Ancient
 
     [System.Serializable]
@@ -17,12 +23,19 @@ namespace MuProto
         public string classId;   // who can wear it
         public int baseStat;     // ATK for weapons, DEF for everything else
         public int plus;         // enhance level (+0 .. +15)
+        public int life;         // Jewel of Life additional option, +4 ATK/DEF per level (0..7)
+        public int[] opts;       // ExOpt values (Excellent items)
+        public string set;       // Ancient set name
+        public int[] sockets;    // per socket: 0 empty, else gemType * 10 + gem level
 
         public bool IsEmpty => string.IsNullOrEmpty(name);
-        public int Stat => Mathf.RoundToInt(baseStat * (1f + 0.1f * plus + 0.06f * Mathf.Max(0, plus - 6) * Mathf.Max(0, plus - 6) / 3f));
-        public string StatName => slot == Slot.Weapon ? "ATK" : "DEF";
+        public int Stat => Mathf.RoundToInt(baseStat * (1f + 0.1f * plus + 0.06f * Mathf.Max(0, plus - 6) * Mathf.Max(0, plus - 6) / 3f)) + life * 4;
+        public string StatName => slot == Slot.Weapon || slot == Slot.Necklace ? "ATK" : slot == Slot.Ring ? "HP" : "DEF";
+        public bool IsArmour => slot == Slot.Armor || slot == Slot.Helm || slot == Slot.Boots || slot == Slot.Gloves || slot == Slot.Pants;
+        public bool HasOpt(ExOpt o) { if (opts != null) foreach (int x in opts) if (x == (int)o) return true; return false; }
+        public int SocketCount => sockets == null ? 0 : sockets.Length;
         public string Label => (plus > 0 ? "+" + plus + " " : "") + name;
-        public int SellPrice => baseStat * 2 + plus * 30 + (tier - 1) * 200;
+        public int SellPrice => baseStat * 2 + plus * 30 + (tier - 1) * 200 + (rarity == Rarity.Common ? 0 : 100);
         public bool CanEnhance => !IsEmpty && plus < GameData.MaxPlus;
 
         // The class's main stat (STR, AGI or ENE) needed to wear it.
@@ -50,7 +63,24 @@ namespace MuProto
         public List<Item> bag = new List<Item>();
         public List<Item> equipped = new List<Item>();
 
-        public int jewelBless, jewelSoul;
+        public int jewelBless, jewelSoul, jewelChaos, jewelLife;
+        public int diamonds;          // premium currency: sign-in, achievements, arena, events
+        public int[] gemBag = new int[20]; // count per (gemType-1) * 5 + (level-1)
+        public int mapId;             // current map (Maps.All)
+        public string charName = "";  // name shown to others (online)
+
+        // growth
+        public int[] talents = new int[6];
+        public int mountsOwned;       // bit per Growth.Mounts index
+        public int mountId = -1;      // mount being ridden, -1 = on foot
+        public int titleId = -1;
+
+        // activities
+        public string signDate = "", onlineDate = "", ccDate = "", arenaDate = "";
+        public int signDays, onlineClaimed, ccRuns, arenaRuns, arenaPoints;
+        public float onlineSeconds;
+        public int kills, bcClears, dsClears, ccClears, bossKills, pkKills, arenaWins;
+        public int achievementsClaimed; // bit per Activities.Achievements index
         public int feathers;          // Condor Feather: wing levels
         public int flames;            // Condor Flame: wing tiers
         public int petFood;
@@ -70,8 +100,10 @@ namespace MuProto
 
         public void EnsureSlots()
         {
-            while (equipped.Count < 4) equipped.Add(new Item());
+            while (equipped.Count < GameData.EquipSlots) equipped.Add(new Item());
             if (skillLevels == null || skillLevels.Length != 3) skillLevels = new[] { 1, 1, 1 };
+            if (gemBag == null || gemBag.Length != 20) gemBag = new int[20];
+            if (talents == null || talents.Length != 6) talents = new int[6];
         }
     }
 
@@ -216,6 +248,9 @@ namespace MuProto
     public static class GameData
     {
         public const int SaveVersion = 2;
+        public const int EquipSlots = 9;
+        public const int Ring2Index = 8;
+        public static Slot SlotAt(int index) => index == Ring2Index ? Slot.Ring : (Slot)index;
         public const int MaxPlus = 15;
         public const int BagSize = 30;
         public const int MaxLevel = 100;
@@ -256,25 +291,89 @@ namespace MuProto
         {
             var cls = Classes.Get(classId);
             float mult = (rarity == Rarity.Epic ? 2.5f : rarity == Rarity.Rare ? 1.6f : 1f) * (1f + 0.5f * (tier - 1));
-            float baseValue = slot == Slot.Weapon ? 8 + level * 3f : 2 + level * 1.5f;
-            string piece = slot == Slot.Weapon ? cls.Weapon : slot == Slot.Armor ? cls.Armor : slot == Slot.Helm ? cls.Helm : "Boots";
-            string prefix = rarity == Rarity.Epic ? "Ancient " : rarity == Rarity.Rare ? "Excellent " : "";
-            return new Item
+            float baseValue;
+            switch (slot)
             {
-                name = prefix + TierName(tier) + " " + piece,
+                case Slot.Weapon: baseValue = 8 + level * 3f; break;
+                case Slot.Necklace: baseValue = 4 + level * 1.2f; break;
+                case Slot.Ring: baseValue = 20 + level * 8f; break;
+                default: baseValue = 2 + level * 1.5f; break;
+            }
+            string piece = slot == Slot.Weapon ? cls.Weapon : slot == Slot.Armor ? cls.Armor : slot == Slot.Helm ? cls.Helm : slot.ToString();
+            bool jewelry = slot == Slot.Necklace || slot == Slot.Ring;
+            string prefix = rarity == Rarity.Epic ? "Ancient " : rarity == Rarity.Rare ? "Excellent " : "";
+            var item = new Item
+            {
+                name = prefix + (jewelry ? JewelryName(slot, tier) : TierName(tier) + " " + piece),
                 slot = slot,
                 rarity = rarity,
                 level = level,
                 tier = Mathf.Clamp(tier, 1, MaxTier),
-                classId = cls.Id,
+                classId = jewelry ? "" : cls.Id, // jewellery fits every class
                 baseStat = Mathf.RoundToInt(baseValue * mult),
             };
+            if (rarity == Rarity.Rare)
+            {
+                int n = Random.value < 0.3f ? 2 : 1;
+                var opts = new List<int>();
+                while (opts.Count < n)
+                {
+                    int o = Random.Range(1, 10);
+                    if (!opts.Contains(o)) opts.Add(o);
+                }
+                item.opts = opts.ToArray();
+                item.sockets = new int[Random.value < 0.5f ? 1 : 0];
+            }
+            else if (rarity == Rarity.Epic)
+            {
+                item.set = jewelry ? null : SetName(cls.Id);
+                item.opts = new[] { Random.Range(1, 10) };
+                item.sockets = new int[2];
+            }
+            return item;
         }
+
+        static string JewelryName(Slot slot, int tier)
+        {
+            string[] neck = { "Pendant of Lightning", "Pendant of Fire", "Pendant of Ice", "Pendant of Wind", "Pendant of Water", "Pendant of Ability" };
+            string[] ring = { "Ring of Ice", "Ring of Poison", "Ring of Fire", "Ring of Earth", "Ring of Wind", "Ring of Magic" };
+            int i = Mathf.Clamp(tier - 1, 0, 5);
+            return slot == Slot.Necklace ? neck[i] : ring[i];
+        }
+
+        // One Ancient set per class: more pieces worn, bigger bonus.
+        public static string SetName(string classId) => classId == "DarkWizard" ? "Apollo" : classId == "Elf" ? "Gywen" : "Hyon";
+
+        public static string OptName(ExOpt o)
+        {
+            switch (o)
+            {
+                case ExOpt.ExcDamage: return "Excellent damage +10%";
+                case ExOpt.AtkPct: return "ATK +5%";
+                case ExOpt.DefPct: return "DEF +5%";
+                case ExOpt.HpPct: return "HP +4%";
+                case ExOpt.CritRate: return "Critical rate +5%";
+                case ExOpt.ZenDrop: return "Zen drop +30%";
+                case ExOpt.LifeOnKill: return "HP +1/8 on kill";
+                case ExOpt.DmgReduce: return "Damage taken -4%";
+                case ExOpt.AtkSpeed: return "Attack speed +7%";
+                default: return "";
+            }
+        }
+
+        public static string GemName(int code)
+        {
+            if (code <= 0) return "empty";
+            return ((GemType)(code / 10)) + " Lv" + (code % 10);
+        }
+
+        public static int GemIndex(GemType t, int lv) => ((int)t - 1) * 5 + (lv - 1);
 
         // Mostly gear for the killer's own class, at the tier their rebirth allows.
         public static Item RollDrop(int monsterLevel, PlayerSave d, float epicBoost = 1f)
         {
-            var slot = (Slot)Random.Range(0, 4);
+            float s = Random.value;
+            var slot = s < 0.12f ? Slot.Necklace : s < 0.24f ? Slot.Ring : (Slot)Random.Range(0, 6);
             float r = Random.value;
             var rarity = r < 0.04f * epicBoost ? Rarity.Epic : r < 0.25f ? Rarity.Rare : Rarity.Common;
             string cls = Random.value < 0.85f ? d.classId : Classes.All[Random.Range(0, Classes.All.Length)].Id;

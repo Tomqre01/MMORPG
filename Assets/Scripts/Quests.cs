@@ -28,19 +28,19 @@ namespace MuProto
             Q(QuestKind.Kill, "Goblin", 15, 600, 2),
             Q(QuestKind.Enhance, null, 3, 800, 2),
             Q(QuestKind.Level, null, 15, 1000, 2, 1),
-            Q(QuestKind.Kill, "Orc", 20, 1500, 2, 0, 5),
+            Q(QuestKind.Kill, "Elite Goblin", 20, 1500, 2, 0, 5),     // Noria
             Q(QuestKind.DevilSquare, null, 1, 2000, 2, 1),
             Q(QuestKind.Wings, null, 1, 2000, 2, 1, 3),
-            Q(QuestKind.Kill, "Golem", 20, 3000, 3, 1, 3),
+            Q(QuestKind.Kill, "Forest Orc", 20, 3000, 3, 1, 3),
             Q(QuestKind.BloodCastle, null, 1, 4000, 3, 1),
             Q(QuestKind.Level, null, 35, 5000, 3, 2),
-            Q(QuestKind.Kill, "Orc Warlord", 25, 6000, 3, 2, 5),
+            Q(QuestKind.Kill, "Ice Turtle", 25, 6000, 3, 2, 5),       // Devias
             Q(QuestKind.WorldBoss, null, 1, 6000, 3, 2),
             Q(QuestKind.Enhance, null, 7, 8000, 2, 2),
             Q(QuestKind.Level, null, 55, 10000, 4, 2),
-            Q(QuestKind.Kill, "Stone Golem", 30, 12000, 4, 3, 5),
+            Q(QuestKind.Kill, "Stone Golem", 30, 12000, 4, 3, 5),     // Lost Tower
             Q(QuestKind.Level, null, 80, 15000, 5, 3),
-            Q(QuestKind.Kill, "Shell Lord", 30, 20000, 5, 3, 8),
+            Q(QuestKind.Kill, "Shell Lord", 30, 20000, 5, 3, 8),      // Atlans
             Q(QuestKind.Level, null, 100, 25000, 5, 4),
             Q(QuestKind.Rebirth, null, 1, 30000, 5, 5, 10),
         };
@@ -158,15 +158,10 @@ namespace MuProto
                 }
                 case QuestKind.Level:
                 case QuestKind.Hunt:
-                    return Go(p, MonsterSpawner.BestFor(d.level));
+                    return Go(p, Maps.BestFor(d));
                 case QuestKind.Rebirth:
                     if (d.level >= GameData.MaxLevel && d.rebirthKills >= GameData.RebirthKillsNeeded) { HUD.Instance.Open("Character"); return null; }
-                    if (d.level >= GameData.MaxLevel)
-                    {
-                        var z = MonsterSpawner.BestFor(d.level);
-                        return Go(p, z);
-                    }
-                    return Go(p, MonsterSpawner.BestFor(d.level));
+                    return Go(p, Maps.BestFor(d));
                 case QuestKind.Pet: HUD.Instance.Open("Pet"); return null;
                 case QuestKind.Enhance: HUD.Instance.Open("Bag"); return "Enhance an equipped item with Jewels";
                 case QuestKind.Wings: HUD.Instance.Open("Wings"); return null;
@@ -182,6 +177,11 @@ namespace MuProto
         static string Go(Player p, MonsterSpawner zone)
         {
             if (DungeonRun.Active != null) return "Finish the dungeon first";
+            if (zone.Map >= 0 && zone.Map != Maps.Current)
+            {
+                if (!Maps.CanEnter(p.Data, Maps.All[zone.Map], out string why)) return Maps.All[zone.Map].Name + ": " + why;
+                Maps.Enter(p, zone.Map, true); // quest travel is free
+            }
             p.StartQuestHunt(zone);
             return "Auto quest: heading to " + zone.MonsterName;
         }

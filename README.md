@@ -13,7 +13,11 @@
 - **ปีก 4 Tier** ประจำคลาส อัปด้วย Condor Feather และเลื่อน Tier ด้วย Condor Flame เพิ่ม ATK DEF HP และความเร็ว
 - **Blood Castle**, **Devil Square** และ **World Boss** (Skeleton King / Gorgon ทุก 15 นาที ตีร่วมกันได้ทั้งเซิร์ฟเวอร์)
 - **Auto-Quest** (แตะแถบเควสต์), **ยาฟื้นพลังอัตโนมัติ**, **CP** รวมทุกอย่าง, **PK Mode** และชื่อแดง
-- 8 โซนมอน Lv1 ถึง Lv80 และเมือง Lorencia (เขตปลอดภัย)
+- **7 แผนที่** (Lorencia, Noria, Devias, Lost Tower, Atlans, Tarkan, Icarus) วาร์ปผ่านปุ่ม Map
+- ช่องใส่ของ 9 ช่อง, Excellent options, เซ็ต Ancient, Gem/Socket, Chaos Machine + Jewel of Life / Chaos
+- ปาร์ตี้ กิลด์ แชท เพื่อน ตั้งชื่อตัวละคร (ออนไลน์)
+- Chaos Castle, Golden Invasion, Arena, เช็กชื่อรายวัน, รางวัลออนไลน์, Achievement, Ranking
+- Talent, Mount, Title, ร้านค้า Zen และ Diamond
 - รายละเอียดทุกระบบ: [docs/systems.md](docs/systems.md)
 
 ## วิธีเปิดเล่น (ครั้งแรก)
@@ -63,6 +67,11 @@ File → Build Profiles → เลือก Android → Switch Platform → ต�
 | `Dungeons.cs` | Blood Castle และ Devil Square |
 | `WorldBoss.cs` | บอสโลกตามเวลา แบ่ง HP ร่วมกันผ่านเซิร์ฟเวอร์ |
 | `Quests.cs` | สายเควสต์หลักและ Auto-Quest |
+| `Maps.cs` | 7 แผนที่ วาร์ป เมือง พ่อค้า |
+| `Growth.cs` | Talent, Mount, Title, ร้านค้า, Chaos Machine |
+| `Activities.cs` | เช็กชื่อ รางวัลออนไลน์ Achievement Ranking Golden Invasion Chaos Castle Arena |
+| `Social.cs` | แชท ปาร์ตี้ กิลด์ เพื่อน (Nakama) |
+| `HUDPanels.cs` | หน้าต่างของระบบใหม่ทั้งหมด (UI ชั่วคราว) |
 | `Visuals.cs` | แสงเรืองของชุดตีบวก สายฟ้า และป้ายชื่อในโลก |
 | `Online.cs` | หน้าล็อกอิน ต่อเซิร์ฟเวอร์ Nakama และเก็บเซฟบนเซิร์ฟเวอร์ |
 | `Multiplayer.cs` | ส่งตำแหน่งตัวเองและแสดงผู้เล่นคนอื่นในแมพ, ส่งดาเมจ PK และดาเมจบอสโลก |

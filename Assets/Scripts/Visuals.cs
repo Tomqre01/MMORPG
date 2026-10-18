@@ -180,7 +180,7 @@ namespace MuProto
             var cam = Camera.main;
             if (cam == null) return;
             Vector3 sp = cam.WorldToScreenPoint(world);
-            text.enabled = sp.z > 0;
+            text.enabled = sp.z > 0 && sp.z < 60f; // labels on other maps are far away
             transform.position = new Vector3(sp.x, sp.y, 0);
         }
     }

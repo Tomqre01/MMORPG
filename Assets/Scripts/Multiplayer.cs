@@ -22,6 +22,10 @@ namespace MuProto
         public int r;      // 1 = red name (outlaw)
         public int k;      // 1 = PK mode on
         public int cp;     // combat power
+        public string u;   // Nakama user id (friend requests)
+        public int tt = -1; // title index
+        public int mt = -1; // mount index, -1 = on foot
+        public string gn;  // guild name
         public float x, z, ry;
         public int a;      // 0 idle, 1 attack, 2 dead
     }
@@ -50,7 +54,23 @@ namespace MuProto
 
         public int OthersOnline => remotes.Count;
         public IEnumerable<RemotePlayer> Remotes => remotes.Values.Where(r => r != null);
-        string MyName => Online.Session != null ? Online.Session.Username : "Player";
+        public string MySession => match != null ? match.Self.SessionId : null;
+        string MyName => Player.Instance != null && !string.IsNullOrEmpty(Player.Instance.Data.charName) ? Player.Instance.Data.charName
+                       : Online.Session != null ? Online.Session.Username : "Player";
+
+        // Nearest other player within range (party invites, friend requests).
+        public RemotePlayer Nearest(Vector3 from, float range)
+        {
+            RemotePlayer best = null;
+            float bestDist = range;
+            foreach (var rp in Remotes)
+            {
+                Vector3 d = rp.transform.position - from;
+                d.y = 0;
+                if (d.magnitude <= bestDist) { bestDist = d.magnitude; best = rp; }
+            }
+            return best;
+        }
 
         public static void Create()
         {
@@ -89,6 +109,8 @@ namespace MuProto
                 foreach (var p in match.Presences) Debug.Log("[Online] Already here: " + p.Username);
                 last = null; // send right away
                 HUD.Message("Online world joined", 2f);
+                Social.Create();
+                Social.Instance.OnConnected(socket);
             }
             catch (Exception e)
             {
@@ -139,6 +161,13 @@ namespace MuProto
                             Player.Instance.OnPvpKill(m.n, m.r == 1);
                         break;
                     }
+                    case Social.OpInvite:
+                    case Social.OpParty:
+                    case Social.OpAccept:
+                    case Social.OpLeave:
+                    case Social.OpPartyChat:
+                        if (Social.Instance != null) Social.Instance.Receive(s.OpCode, from, json);
+                        break;
                     case OpBoss:
                     {
                         var m = JsonUtility.FromJson<BossMsg>(json);
@@ -162,7 +191,7 @@ namespace MuProto
             rp.Apply(st);
         }
 
-        void Send(long op, object msg)
+        public void Send(long op, object msg)
         {
             if (match == null || socket == null) return;
             socket.SendMatchStateAsync(match.Id, op, JsonUtility.ToJson(msg));
@@ -223,6 +252,10 @@ namespace MuProto
                 r = p.IsRed ? 1 : 0,
                 k = p.PkMode ? 1 : 0,
                 cp = p.CombatPower,
+                u = Online.Session != null ? Online.Session.UserId : "",
+                tt = p.Data.titleId,
+                mt = p.Riding ? p.Data.mountId : -1,
+                gn = Social.Instance != null ? Social.Instance.GuildName : "",
                 x = p.transform.position.x,
                 z = p.transform.position.z,
                 ry = p.transform.eulerAngles.y,
@@ -236,13 +269,14 @@ namespace MuProto
 
         static bool SameAs(PlayerState a, PlayerState b) =>
             a.c == b.c && a.lv == b.lv && a.rb == b.rb && a.w == b.w && a.pt == b.pt && a.g == b.g && a.h == b.h &&
-            a.r == b.r && a.k == b.k && a.cp == b.cp && a.a == b.a &&
+            a.r == b.r && a.k == b.k && a.cp == b.cp && a.a == b.a && a.tt == b.tt && a.mt == b.mt && a.gn == b.gn &&
             Mathf.Abs(a.x - b.x) < 0.02f && Mathf.Abs(a.z - b.z) < 0.02f && Mathf.Abs(Mathf.DeltaAngle(a.ry, b.ry)) < 2f;
 
         void Remove(string sessionId)
         {
             if (remotes.TryGetValue(sessionId, out var rp) && rp != null) rp.Remove();
             remotes.Remove(sessionId);
+            if (Social.Instance != null) Social.Instance.OnPlayerLeft(sessionId);
         }
 
         void ClearRemotes()
@@ -262,7 +296,7 @@ namespace MuProto
     // Another player's character: moves smoothly toward the last position they sent.
     public class RemotePlayer : MonoBehaviour
     {
-        Transform body, wings;
+        Transform body, wings, mount;
         ModelAnimator anim;
         RemotePet pet;
         Aura aura;
@@ -273,18 +307,12 @@ namespace MuProto
         float targetRot;
 
         public string SessionId { get; private set; }
+        public string UserId => state != null ? state.u : null;
+        public int HpPercent => state != null ? state.h : 0;
         public string Name => state != null ? state.n : "";
         public bool IsDead => state != null && state.a == 2;
         public bool IsRed => state != null && state.r == 1;
-        public bool InTown
-        {
-            get
-            {
-                Vector3 p = transform.position;
-                p.y = 0;
-                return p.magnitude < GameData.TownRadius;
-            }
-        }
+        public bool InTown => Maps.InTown(transform.position);
 
         // Anyone may hit an outlaw; others only while you are in PK mode. Never inside town.
         public bool CanBeAttacked(bool attackerPkMode) => state != null && !IsDead && !InTown && (attackerPkMode || IsRed);
@@ -306,6 +334,7 @@ namespace MuProto
         {
             bool rebuildBody = state == null || state.c != st.c;
             bool rebuildWings = state == null || state.w != st.w;
+            bool rebuildMount = state == null || state.mt != st.mt;
             state = st;
             targetPos = new Vector3(st.x, 0, st.z);
             targetRot = st.ry;
@@ -319,15 +348,25 @@ namespace MuProto
                 aura = Aura.Attach(body, cls.BodyColor);
             }
             aura.SetLevel(st.g);
-            if (rebuildWings)
+            if (rebuildWings || rebuildMount)
             {
                 if (wings != null) Destroy(wings.gameObject);
                 wings = Player.MakeWings(transform, st.w);
             }
+            if (rebuildMount)
+            {
+                if (mount != null) Destroy(mount.gameObject);
+                mount = st.mt >= 0 && st.mt < Growth.Mounts.Length ? Growth.MakeMount(transform, st.mt) : null;
+            }
+            float lift = mount != null ? 0.8f : 0f;
+            if (body != null) body.localPosition = Vector3.up * lift;
+            if (wings != null) wings.localPosition = new Vector3(0, 1.35f + lift, -0.35f);
             if (st.pt > 0 && pet == null) pet = RemotePet.Create(transform);
             else if (st.pt <= 0 && pet != null) { Destroy(pet.gameObject); pet = null; }
 
-            plateText.text = (st.k == 1 ? "[PK] " : "") + (st.rb > 0 ? st.rb + "R " : "") + "Lv " + st.lv + " " + cls.Name + "  " + st.n + "\nCP " + st.cp;
+            string title = st.tt >= 0 && st.tt < Growth.Titles.Length ? "~ " + Growth.Titles[st.tt].Name + " ~\n" : "";
+            string guild = string.IsNullOrEmpty(st.gn) ? "" : "  [" + st.gn + "]";
+            plateText.text = title + (st.k == 1 ? "[PK] " : "") + (st.rb > 0 ? st.rb + "R " : "") + "Lv " + st.lv + " " + cls.Name + "  " + st.n + guild + "\nCP " + st.cp;
             plateText.color = st.r == 1 ? new Color(1f, 0.3f, 0.25f) : st.k == 1 ? new Color(1f, 0.65f, 0.25f) : new Color(0.6f, 0.9f, 1f);
             UIB.SetBar(hpFill, st.h / 100f);
             if (st.a == 1 && anim != null) anim.Play(ModelAnimator.Anim.Attack, false, 0.5f);

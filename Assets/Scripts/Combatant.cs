@@ -33,7 +33,7 @@ namespace MuProto
         public int TakeDamage(int raw, bool crit, Combatant source)
         {
             if (IsDead) return 0;
-            int dmg = Mathf.Max(1, raw - Def / 2);
+            int dmg = ReduceIncoming(Mathf.Max(1, raw - Def / 2));
             dmg = Mathf.Min(dmg, Hp);
             Hp -= dmg;
             FloatingText.Spawn(transform.position + Vector3.up * 2f, crit ? dmg + "!" : dmg.ToString(), DamageColor(crit), crit ? 44 : 34);
@@ -91,6 +91,7 @@ namespace MuProto
         protected abstract Color DamageColor(bool crit);
         protected virtual void OnDamaged(Combatant source) { }
         protected virtual void OnHpLost(int amount, Combatant source) { }
+        protected virtual int ReduceIncoming(int dmg) => dmg;
         protected abstract void Die(Combatant killer);
     }
 }

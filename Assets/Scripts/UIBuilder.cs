@@ -100,5 +100,23 @@ namespace MuProto
         }
 
         public static void SetBar(RectTransform fill, float ratio) => fill.anchorMax = new Vector2(Mathf.Clamp01(ratio), 1);
+
+        // A single-line text box (chat, names).
+        public static InputField Field(Transform parent, string value, Vector2 anchor, Vector2 pos, Vector2 size, int fontSize = 30, int limit = 64)
+        {
+            var rt = Rect("Field", parent, anchor, pos, size);
+            var bg = Image(rt, new Color(1, 1, 1, 0.12f));
+            var textRt = Stretch(Rect("Text", rt, Vector2.zero, Vector2.zero, Vector2.zero));
+            textRt.offsetMin = new Vector2(14, 0);
+            textRt.offsetMax = new Vector2(-14, 0);
+            var text = Text(textRt, "", fontSize, Color.white);
+            text.supportRichText = false;
+            var field = rt.gameObject.AddComponent<InputField>();
+            field.targetGraphic = bg;
+            field.textComponent = text;
+            field.characterLimit = limit;
+            field.text = value;
+            return field;
+        }
     }
 }
