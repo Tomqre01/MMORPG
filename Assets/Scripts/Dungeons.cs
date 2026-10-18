@@ -183,7 +183,7 @@ namespace MuProto
     {
         enum Phase { Bridge, Gate, Statue, Return }
 
-        const float TimeLimit = 300f;
+        const float TimeLimit = 480f; // server BloodCastleInfo DurationTime
         const int BridgeKills = 25;
         static readonly Vector3 Center = new Vector3(600f, 0, 0);
         static readonly Vector3 AngelPos = new Vector3(600f, 0, -33f);
