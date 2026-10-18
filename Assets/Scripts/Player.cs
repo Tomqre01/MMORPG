@@ -30,6 +30,9 @@ namespace MuProto
         Transform body, wings;
         Aura aura;
         GearVisual gear;
+        WeaponTrail trail;
+        int combo;          // next step of the basic attack combo (0, 1, 2 = finisher)
+        float lastSwing;
         float attackTimer, respawnTimer, lastHitTime, regenAcc, saveTimer, potionCd;
         float buffUntil, buffAtk, buffDef;
         string lastAttackerSession, lastAttackerName;
@@ -273,6 +276,8 @@ namespace MuProto
             aura.SetLevel(HasClass ? GlowPlus : 0);
             gear = body.GetComponentInChildren<GearVisual>();
             if (gear != null) gear.Apply(GearVisual.TiersOf(Data));
+            var model = gear != null ? gear.transform : body;
+            trail = WeaponTrail.Attach(model, Fx.TrailColor(Class.Id));
             BuildWings();
             BuildMount();
         }
@@ -542,20 +547,113 @@ namespace MuProto
             if (target != null) BasicAttack();
         }
 
+        // A three-step combo: two quick cuts, then a heavier finisher. Each step plays its own clip,
+        // draws a slash trail, steps into the target, and lands its hit at the clip's impact frame.
         void BasicAttack()
         {
             if (attackTimer > 0) return;
-            if (pvpTarget != null)
+            RemotePlayer rp = pvpTarget;
+            Monster m = rp == null ? target : null;
+            if (rp == null && (m == null || m.IsDead || FlatDistance(m) > Class.AttackRange + 1.5f)) return;
+            if (Time.time - lastSwing > AttackInterval * 2.2f + 0.4f) combo = 0;
+            int step = combo;
+            combo = (combo + 1) % 3;
+            lastSwing = Time.time;
+            bool finisher = step == 2;
+            float dur = AttackInterval * (finisher ? 1.35f : 1f);
+            attackTimer = dur;
+            Vector3 aim = rp != null ? rp.transform.position : m.transform.position;
+            FaceNow(aim);
+            PlayClip("Attack0" + (step + 1), ModelAnimator.Anim.Attack, dur * 0.95f);
+            if (!Class.Ranged)
             {
-                attackTimer = AttackInterval;
-                PlayAction(ModelAnimator.Anim.Attack, AttackInterval * 0.9f);
-                DealPvp(pvpTarget, 1f, Class.BodyColor, false);
-                return;
+                if (trail != null) trail.Emit(dur * 0.75f);
+                StartCoroutine(Lunge(aim, finisher ? 0.7f : 0.3f, dur * 0.35f));
             }
-            if (target == null || target.IsDead || FlatDistance(target) > Class.AttackRange + 1.5f) return;
-            attackTimer = AttackInterval;
-            PlayAction(ModelAnimator.Anim.Attack, AttackInterval * 0.9f);
-            Deal(target, 1f, Class.BodyColor, false);
+            StartCoroutine(Impact(step, rp, m, dur * (finisher ? 0.5f : 0.42f)));
+        }
+
+        IEnumerator Impact(int step, RemotePlayer rp, Monster m, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (IsDead) yield break;
+            bool fin = step == 2;
+            var color = Fx.TrailColor(Class.Id);
+            if (rp != null)
+            {
+                DealPvp(rp, fin ? 1.5f : 1f, Class.BodyColor, fin);
+                yield break;
+            }
+            if (m == null || m.IsDead) yield break;
+            if (Class.Ranged)
+            {
+                Deal(m, fin ? 1.5f : 1f, Class.BodyColor, fin);
+                if (fin) // the finisher also lets fly at two more monsters near the target
+                {
+                    int extra = 0;
+                    foreach (var o in Monster.All.ToArray())
+                    {
+                        if (extra >= 2) break;
+                        if (o == m || o.IsDead || Flat(o.transform.position - m.transform.position) > 3.5f) continue;
+                        Deal(o, 0.7f, Class.BodyColor, false);
+                        extra++;
+                    }
+                }
+                yield break;
+            }
+
+            // Melee cleave: the target plus everyone in front (the finisher hits all around).
+            Vector3 fwd = transform.forward;
+            float reach = Class.AttackRange + (fin ? 1.6f : 1f);
+            int hits = 0;
+            foreach (var o in Monster.All.ToArray())
+            {
+                if (o == null || o.IsDead || (o.Stationary && o != m)) continue;
+                Vector3 d = o.transform.position - transform.position;
+                d.y = 0;
+                bool main = o == m;
+                if (main ? d.magnitude > reach + 1f : d.magnitude > reach || (!fin && Vector3.Angle(fwd, d) > 70f)) continue;
+                int dmg = Roll(main ? (fin ? 1.6f : 1f) : (fin ? 0.8f : 0.5f), out bool crit);
+                o.TakeDamage(dmg, crit, this);
+                Fx.Spark(o.transform.position + Vector3.up * 1.1f, color, crit ? 2f : 1.4f);
+                o.Knock(transform.position, fin ? 1.1f : 0.4f);
+                if (++hits >= 8) break;
+            }
+            Vector3 chest = transform.position + Vector3.up * 1.1f;
+            if (step == 0) Fx.Arc(chest, transform.rotation * Quaternion.Euler(0, 0, 40f), 2.2f, -80f, 160f, color, 1f);
+            else if (step == 1) Fx.Arc(chest, transform.rotation * Quaternion.Euler(0, 0, -8f), 2.4f, 80f, -160f, color, 1f);
+            else
+            {
+                Fx.Shockwave(transform.position + fwd * 1.2f, reach, color);
+                CameraFollow.Shake(0.22f, 0.3f);
+            }
+            if (hits > 0) Fx.HitStop(fin ? 0.08f : 0.04f);
+        }
+
+        void FaceNow(Vector3 at)
+        {
+            Vector3 d = at - transform.position;
+            d.y = 0;
+            if (d.sqrMagnitude > 0.0001f) transform.rotation = Quaternion.LookRotation(d.normalized);
+        }
+
+        // Step in toward the target as the blow starts (never into it).
+        IEnumerator Lunge(Vector3 at, float distance, float seconds)
+        {
+            Vector3 d = at - transform.position;
+            d.y = 0;
+            float room = d.magnitude - 1.1f;
+            distance = Mathf.Min(distance, room);
+            if (distance <= 0.02f) yield break;
+            Vector3 dir = d.normalized;
+            for (float t = 0; t < seconds; t += Time.deltaTime)
+            {
+                Vector3 p = transform.position + dir * (distance * Time.deltaTime / seconds);
+                p.x = Mathf.Clamp(p.x, Bounds.xMin, Bounds.xMax);
+                p.z = Mathf.Clamp(p.z, Bounds.yMin, Bounds.yMax);
+                transform.position = p;
+                yield return null;
+            }
         }
 
         // Melee hits land now; ranged ones fly as a projectile and land on arrival.
@@ -625,7 +723,16 @@ namespace MuProto
                     }
                     if (d.sqrMagnitude > 0.001f) transform.rotation = Quaternion.LookRotation(d.normalized);
                     if (rp != null) DealPvp(rp, mult, sk.Color, true);
-                    else Deal(t, mult, sk.Color, true);
+                    else
+                    {
+                        Deal(t, mult, sk.Color, true);
+                        t.Knock(transform.position, 1.2f);
+                        Fx.Spark(t.transform.position + Vector3.up * 1.1f, sk.Color, 2.2f);
+                    }
+                    Fx.Arc(transform.position + Vector3.up * 1.1f + transform.forward * 0.6f, transform.rotation * Quaternion.Euler(0, 0, 80f), 2f, -90f, 180f, sk.Color, 1.1f);
+                    Fx.Shockwave(transform.position + transform.forward * 0.8f, 3f, sk.Color);
+                    CameraFollow.Shake(0.2f, 0.25f);
+                    Fx.HitStop(0.06f);
                     break;
                 }
                 case SkillKind.SelfArea:
@@ -633,11 +740,12 @@ namespace MuProto
                     int n = HitArea(transform.position, sk.Radius, mult) + HitPlayersArea(transform.position, sk.Radius, mult, sk.Color);
                     if (n == 0) return false;
                     Effect.Ring(transform.position, sk.Radius, sk.Color);
-                    if (sk.Radius >= 6f) // the big ones get a second wave and a spin
-                    {
+                    StartCoroutine(SpinArcs(sk.Color, Mathf.Min(sk.Radius, 4.5f)));
+                    if (sk.Radius >= 6f) // the big ones get a second wave
                         Effect.Ring(transform.position, sk.Radius * 0.6f, Color.Lerp(sk.Color, Color.white, 0.4f));
-                        StartCoroutine(Spin(0.45f));
-                    }
+                    if (anim == null || !anim.HasClip("Skill01")) StartCoroutine(Spin(0.45f));
+                    CameraFollow.Shake(0.15f, 0.25f);
+                    Fx.HitStop(0.05f);
                     break;
                 }
                 case SkillKind.TargetArea:
@@ -677,8 +785,23 @@ namespace MuProto
                 }
             }
             skillCd[i] = sk.Cooldown;
-            PlayAction(ModelAnimator.Anim.Attack, 0.5f);
+            bool big = sk.Kind == SkillKind.SelfArea || sk.Kind == SkillKind.Buff;
+            float len = big ? 0.8f : 0.65f;
+            PlayClip(big ? "Skill01" : "Skill02", ModelAnimator.Anim.Attack, len);
+            if (trail != null && !Class.Ranged) trail.Emit(len * 0.85f);
+            attackTimer = Mathf.Max(attackTimer, len * 0.8f);
+            combo = 0;
             return true;
+        }
+
+        // Crescents racing around the hero while the whirlwind spins.
+        IEnumerator SpinArcs(Color color, float radius)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                Fx.Arc(transform.position + Vector3.up * (0.9f + 0.15f * i), transform.rotation, radius * (0.75f + 0.12f * i), i * 120f, 300f, color, 1.1f, 0.3f);
+                yield return new WaitForSeconds(0.12f);
+            }
         }
 
         IEnumerator Spin(float seconds)

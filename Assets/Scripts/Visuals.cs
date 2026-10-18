@@ -46,7 +46,7 @@ namespace MuProto
 
         public static int TierFor(int plus) => plus >= 13 ? 4 : plus >= 11 ? 3 : plus >= 9 ? 2 : plus >= 7 ? 1 : 0;
 
-        static readonly float[] Intensity = { 0f, 0.35f, 0.7f, 1.1f, 1.6f };
+        static readonly float[] Intensity = { 0f, 0.18f, 0.32f, 0.5f, 0.75f }; // enough to shine, not to bleach the armour colours
 
         void Collect()
         {

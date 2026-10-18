@@ -133,6 +133,15 @@ namespace MuProto
         const float NearPitch = 30f, FarPitch = 55f;
         const float LookHeight = 1.3f;             // look at the chest, not the feet
         float pinchStart = -1f, zoomAtPinch;
+        static float shakeAmp, shakeLen, shakeLeft;
+
+        // A short rattle for heavy blows.
+        public static void Shake(float amplitude, float seconds)
+        {
+            if (shakeLeft > 0f && shakeAmp * shakeLeft / shakeLen > amplitude) return; // a bigger one is still going
+            shakeAmp = amplitude;
+            shakeLen = shakeLeft = seconds;
+        }
 
         public Vector3 Offset
         {
@@ -161,6 +170,12 @@ namespace MuProto
             else transform.position = Vector3.Lerp(transform.position, want, 10f * Time.deltaTime);
             Vector3 look = Target.position + Vector3.up * LookHeight - transform.position;
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(look), 12f * Time.deltaTime);
+            if (shakeLeft > 0f)
+            {
+                shakeLeft -= Time.unscaledDeltaTime;
+                float k = Mathf.Max(0f, shakeLeft / shakeLen);
+                transform.position += Random.insideUnitSphere * shakeAmp * k;
+            }
         }
 
         void ReadZoom()
@@ -230,15 +245,8 @@ namespace MuProto
     {
         float size, t;
 
-        public static void Ring(Vector3 position, float radius, Color color)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            Destroy(go.GetComponent<Collider>());
-            go.transform.position = new Vector3(position.x, 0.05f, position.z);
-            go.transform.localScale = new Vector3(0.1f, 0.02f, 0.1f);
-            Paint.Color(go, color);
-            go.AddComponent<Effect>().size = radius * 2f;
-        }
+        // Now drawn as a glowing additive shockwave (Fx); the old solid disc covered the fight.
+        public static void Ring(Vector3 position, float radius, Color color) => Fx.Shockwave(position, radius, color);
 
         void Update()
         {
