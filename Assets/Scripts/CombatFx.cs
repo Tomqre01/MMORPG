@@ -126,15 +126,18 @@ namespace MuProto
             Time.timeScale = 1f;
         }
 
-        // A flash with rays where a hit lands.
-        public static void Spark(Vector3 pos, Color color, float size = 1.3f)
+        // A flash with rays where a hit lands. layer / view: for scenes filmed by another camera (the Backpack).
+        public static GameObject Spark(Vector3 pos, Color color, float size = 1.3f, int layer = 0, Camera view = null)
         {
             var q = Quad("Spark", Star, Color.Lerp(color, Color.white, 0.35f) * 1.6f);
+            q.layer = layer;
             q.transform.position = pos;
             var s = q.AddComponent<FxSprite>();
             s.size = size;
             s.life = 0.18f;
             s.spin = Random.Range(0f, 90f);
+            s.view = view;
+            return q;
         }
 
         // A glowing crescent: radius around `center`, swept from `startDeg` through `sweepDeg`
@@ -148,12 +151,13 @@ namespace MuProto
         }
 
         // A ring on the ground that races outwards.
-        public static void Shockwave(Vector3 pos, float radius, Color color)
+        public static void Shockwave(Vector3 pos, float radius, Color color, int layer = 0, Camera view = null)
         {
             var go = new GameObject("Shockwave");
+            go.layer = layer;
             go.transform.position = new Vector3(pos.x, pos.y + 0.08f, pos.z);
             go.AddComponent<FxArc>().Init(radius, 0f, 360f, 0.8f, color, 0.35f, true);
-            Spark(pos + Vector3.up * 0.3f, color, Mathf.Min(radius * 0.8f, 3f));
+            Spark(pos + Vector3.up * 0.3f, color, Mathf.Min(radius * 0.8f, 3f), layer, view);
         }
 
         static GameObject Quad(string name, Texture tex, Color tint)
@@ -191,6 +195,7 @@ namespace MuProto
     public class FxSprite : MonoBehaviour
     {
         public float size = 1f, life = 0.2f, spin;
+        public Camera view; // faces this camera (default: the main one)
         float t;
         Material mat;
         Color baseColor;
@@ -206,7 +211,7 @@ namespace MuProto
             t += Time.deltaTime;
             float k = t / life;
             if (k >= 1f) { Destroy(gameObject); return; }
-            var cam = Camera.main;
+            var cam = view != null ? view : Camera.main;
             if (cam != null) transform.rotation = cam.transform.rotation * Quaternion.Euler(0, 0, spin + k * 40f);
             transform.localScale = Vector3.one * size * Mathf.Lerp(0.5f, 1.15f, Mathf.Sqrt(k));
             var c = baseColor;

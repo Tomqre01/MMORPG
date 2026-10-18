@@ -570,6 +570,8 @@ namespace MuProto
         {
             var p = Player.Instance;
             if (p == null) return;
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null && kb.bKey.wasPressedThisFrame) inventory.Toggle(); // PC: B opens the Backpack
             var d = p.Data;
             classSelect.SetActive(!p.HasClass);
             var cls = p.Class;

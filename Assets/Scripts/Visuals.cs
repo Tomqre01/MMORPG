@@ -75,7 +75,10 @@ namespace MuProto
 
         void ApplyGlow(Material m)
         {
-            Color e = (baseEmission.TryGetValue(m, out var b) ? b : Color.black) + (tier > 0 ? glow * Intensity[tier] : Color.black);
+            // big armour plates and cloth shine less than trim and blades, so the tier colours stay readable
+            string n = m.name;
+            float k = n.Contains("_arm") || n.Contains("_skin") || n.Contains("_under") || n.Contains("_shoe") ? 0.35f : 1f;
+            Color e = (baseEmission.TryGetValue(m, out var b) ? b : Color.black) + (tier > 0 ? glow * Intensity[tier] * k : Color.black);
             if (e.maxColorComponent <= 0.001f)
             {
                 m.DisableKeyword("_EMISSION");

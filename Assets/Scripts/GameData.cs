@@ -68,6 +68,7 @@ namespace MuProto
         public int[] gemBag = new int[20]; // count per (gemType-1) * 5 + (level-1)
         public int mapId;             // current map (Maps.All)
         public string charName = "";  // name shown to others (online)
+        public bool hideHelm;         // Backpack toggle: show the hair instead of the helm
 
         // growth
         public int[] talents = new int[6];

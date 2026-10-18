@@ -84,27 +84,28 @@ namespace MuProto
             return g;
         }
 
-        // tiers[i]: tier (1..6) of the item in Shown[i], 0 = nothing there.
+        // looks[i] for the item in Shown[i]: tier (1..6) + 10 * rarity (0 Normal, 1 Excellent, 2 Ancient); 0 = nothing there.
+        // Excellent pieces get glowing trim, Ancient ones a stronger glow.
         public void Apply(int[] tiers)
         {
             if (tiers == null || tiers.Length < Shown.Length) tiers = new int[Shown.Length];
             if (shown != null && System.Linq.Enumerable.SequenceEqual(shown, tiers)) return;
             shown = (int[])tiers.Clone();
 
-            int weapon = tiers[0];
+            int weapon = tiers[0] % 10;
             for (int t = 1; t <= Tiers; t++) Show("G_Weapon" + t, t == weapon);
 
             var aura = GetComponentInParent<Aura>();
             for (int i = 1; i < Shown.Length; i++)
             {
                 var slot = Shown[i];
-                int tier = Mathf.Clamp(tiers[i], 0, Tiers);
+                int tier = Mathf.Clamp(tiers[i] % 10, 0, Tiers), rarity = tiers[i] / 10;
                 int stage = tier > 0 ? (tier - 1) / 2 : -1;
                 for (int s = 0; s < Stages; s++)
                 {
                     bool on = s == stage;
                     var r = Show("G_" + slot + s, on);
-                    if (on && r != null) Paint(r, tier, aura);
+                    if (on && r != null) Paint(r, tier, rarity, aura);
                 }
                 if (slot == Slot.Helm) Show("G_Hair", tier == 0);
             }
@@ -117,7 +118,20 @@ namespace MuProto
             return r;
         }
 
-        void Paint(Renderer r, int tier, Aura aura)
+        // Only one piece showing (for the Backpack's item icons). Returns it, or null.
+        public Renderer ShowOnly(Slot slot, int tier, int rarity)
+        {
+            shown = null;
+            foreach (var p in parts.Values) p.enabled = false;
+            tier = Mathf.Clamp(tier, 1, Tiers);
+            string name = slot == Slot.Weapon ? "G_Weapon" + tier : "G_" + slot + (tier - 1) / 2;
+            if (!parts.TryGetValue(name, out var r)) return null;
+            r.enabled = true;
+            if (slot != Slot.Weapon) Paint(r, tier, rarity, null);
+            return r;
+        }
+
+        void Paint(Renderer r, int tier, int rarity, Aura aura)
         {
             if (!Palettes.TryGetValue(classId ?? "", out var pal)) return;
             foreach (var m in r.materials) // per-object copies, so every piece and every player keeps its own colours
@@ -129,13 +143,14 @@ namespace MuProto
                 Color c = pal[tier - 1, k];
                 if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
                 if (m.HasProperty("_Color")) m.SetColor("_Color", c);
-                if (Keys[k] == "glow")
-                {
-                    Color e = c * (1.2f + 0.3f * tier);
-                    m.EnableKeyword("_EMISSION");
-                    m.SetColor("_EmissionColor", e);
-                    if (aura != null) aura.SetBaseEmission(m, e);
-                }
+                Color e = Color.black;
+                if (Keys[k] == "glow") e = c * (1.2f + 0.3f * tier);
+                else if (Keys[k] == "trim" && rarity > 0) e = (Color)pal[tier - 1, 3] * (rarity >= 2 ? 0.8f : 0.35f);
+                else if (Keys[k] != "trim") continue;
+                if (e.maxColorComponent > 0f) m.EnableKeyword("_EMISSION");
+                else m.DisableKeyword("_EMISSION");
+                m.SetColor("_EmissionColor", e);
+                if (aura != null) aura.SetBaseEmission(m, e);
             }
         }
 
@@ -147,16 +162,17 @@ namespace MuProto
             for (int i = 0; i < Shown.Length; i++)
             {
                 var it = d.equipped[(int)Shown[i]];
-                t[i] = it.IsEmpty ? 0 : Mathf.Clamp(it.tier, 1, Tiers);
+                if (it.IsEmpty || (Shown[i] == Slot.Helm && d.hideHelm)) continue;
+                t[i] = Mathf.Clamp(it.tier, 1, Tiers) + 10 * (int)it.rarity;
             }
             return t;
         }
 
-        // "312000": one digit per Shown slot, sent to other players in PlayerState.eq.
+        // One character per Shown slot ('0' + look, so "3;1000"), sent to other players in PlayerState.eq.
         public static string Encode(int[] tiers)
         {
             var sb = new System.Text.StringBuilder(tiers.Length);
-            foreach (int t in tiers) sb.Append((char)('0' + Mathf.Clamp(t, 0, 9)));
+            foreach (int t in tiers) sb.Append((char)('0' + Mathf.Clamp(t, 0, 29)));
             return sb.ToString();
         }
 
@@ -164,7 +180,11 @@ namespace MuProto
         {
             var t = new int[Shown.Length];
             if (string.IsNullOrEmpty(code)) return t;
-            for (int i = 0; i < t.Length && i < code.Length; i++) t[i] = Mathf.Clamp(code[i] - '0', 0, Tiers);
+            for (int i = 0; i < t.Length && i < code.Length; i++)
+            {
+                int v = Mathf.Clamp(code[i] - '0', 0, 29);
+                t[i] = Mathf.Min(v % 10, Tiers) + 10 * Mathf.Min(v / 10, 2);
+            }
             return t;
         }
     }

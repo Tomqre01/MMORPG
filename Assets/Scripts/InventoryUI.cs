@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -5,13 +6,14 @@ using UnityEngine.UI;
 
 namespace MuProto
 {
-    // The Backpack: equipment slots on the left, the hero in 3D in the middle (wearing what is
-    // equipped, drag to turn), the bag on the right, and the picked item's details underneath.
-    // Tap an item to look at it, tap it again (or the button) to put it on / take it off.
+    // The Backpack: equipment slots on the left, the hero in 3D in the middle wearing exactly what
+    // is equipped (drag to turn), the bag on the right. Item squares show a picture of the piece
+    // itself. Tap an item for its card (stats, requirements, compare) with Equip / Take off / Enhance;
+    // tap it again to wear it. Changing gear flashes the hero and shows the Power change.
     public class InventoryUI
     {
-        const float Tile = 112, Gap = 10, Cell = 112, CellGap = 8;
-        const int Cols = 6;
+        const float Tile = 112, Gap = 10, Cell = 104, CellGap = 8;
+        const int Cols = 5;
         static readonly Vector2 TL = new Vector2(0, 1);
 
         // Left column, then right column.
@@ -21,13 +23,14 @@ namespace MuProto
             (int)Slot.Gloves, (int)Slot.Boots, (int)Slot.Ring, GameData.Ring2Index, -1, // -1: wings
         };
 
-        readonly RectTransform panel, equipRoot, bagRoot, actions;
+        readonly RectTransform panel, stage, equipRoot, bagRoot, card, banner;
         readonly GameObject root;
-        readonly Text detail, info, bagTitle, powerText, nameText, zen, diamonds, bless, soul;
+        readonly Text info, bagTitle, powerText, nameText, zen, diamonds, bless, soul, bannerText, helmText;
         readonly RawImage view;
         readonly HashSet<Item> seen = new HashSet<Item>();
         int pickedEquip = -1, pickedBag = -1;
         bool firstOpen = true;
+        Coroutine bannerRun;
 
         public InventoryUI(Transform canvas)
         {
@@ -35,55 +38,70 @@ namespace MuProto
 
             zen = Skin.Pill(panel, UIB.Circle, new Color(1f, 0.8f, 0.25f), TL, new Vector2(48, -92), 210);
             diamonds = Skin.Pill(panel, Skin.Diamond, new Color(0.45f, 0.8f, 1f), TL, new Vector2(282, -92), 170);
-            bless = Skin.Pill(panel, Skin.Diamond, new Color(0.7f, 0.55f, 1f), TL, new Vector2(1060, -92), 200);
-            soul = Skin.Pill(panel, Skin.Diamond, new Color(1f, 0.55f, 0.75f), TL, new Vector2(1290, -92), 200);
+            bless = Skin.Pill(panel, Skin.Diamond, new Color(0.7f, 0.55f, 1f), TL, new Vector2(1080, -92), 200);
+            soul = Skin.Pill(panel, Skin.Diamond, new Color(1f, 0.55f, 0.75f), TL, new Vector2(1310, -92), 200);
 
             // equipment slots
-            Skin.Sliced(UIB.Rect("EquipBox", panel, TL, new Vector2(22, -146), new Vector2(256, 622)), Skin.Inset, Color.white).raycastTarget = false;
-            equipRoot = UIB.Rect("Equipped", panel, TL, new Vector2(34, -158), new Vector2(234, 600));
+            Skin.Sliced(UIB.Rect("EquipBox", panel, TL, new Vector2(22, -146), new Vector2(256, 694)), Skin.Inset, Color.white).raycastTarget = false;
+            equipRoot = UIB.Rect("Equipped", panel, TL, new Vector2(34, -168), new Vector2(234, 640));
 
             // the hero
-            var stage = UIB.Rect("Stage", panel, TL, new Vector2(290, -146), new Vector2(440, 622));
+            stage = UIB.Rect("Stage", panel, TL, new Vector2(290, -146), new Vector2(640, 694));
             Skin.Sliced(stage, Skin.Inset, Color.white).raycastTarget = false;
-            var glow = UIB.Rect("Glow", stage, new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(380, 120), new Vector2(0.5f, 0.5f));
+            var glow = UIB.Rect("Glow", stage, new Vector2(0.5f, 0), new Vector2(0, 60), new Vector2(520, 150), new Vector2(0.5f, 0.5f));
             UIB.Image(glow, new Color(1f, 0.85f, 0.45f, 0.35f), Skin.Soft).raycastTarget = false;
             var viewRt = UIB.Stretch(UIB.Rect("View", stage, Vector2.zero, Vector2.zero, Vector2.zero));
             viewRt.offsetMin = new Vector2(6, 6);
             viewRt.offsetMax = new Vector2(-6, -6);
             view = viewRt.gameObject.AddComponent<RawImage>();
             view.gameObject.AddComponent<PreviewDrag>();
-            nameText = UIB.Label(stage, "", 24, TL, new Vector2(16, -10), new Vector2(408, 34), TextAnchor.MiddleCenter);
+            var tapHero = view.gameObject.AddComponent<Button>();
+            tapHero.transition = Selectable.Transition.None;
+            tapHero.onClick.AddListener(() => { pickedBag = pickedEquip = -1; Refresh(); }); // tap the hero: close the card
+            nameText = UIB.Label(stage, "", 26, TL, new Vector2(16, -12), new Vector2(608, 36), TextAnchor.MiddleCenter);
             nameText.color = Skin.Cream;
             nameText.raycastTarget = false;
-            var pw = UIB.Rect("Power", stage, new Vector2(0.5f, 0), new Vector2(0, 10), new Vector2(320, 52), new Vector2(0.5f, 0));
+            var pw = UIB.Rect("Power", stage, new Vector2(0.5f, 0), new Vector2(0, 12), new Vector2(360, 56), new Vector2(0.5f, 0));
             UIB.Image(pw, Color.white, Skin.Banner).raycastTarget = false;
-            powerText = Skin.Title(pw, "", 28, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320, 52));
+            powerText = Skin.Title(pw, "", 30, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(360, 56));
             powerText.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             powerText.raycastTarget = false;
+            var helm = UIB.Button(stage, "", new Vector2(1, 1), new Vector2(-12, -54), new Vector2(150, 46), new Color(0.15f, 0.14f, 0.16f),
+                () => { var d = Player.Instance.Data; d.hideHelm = !d.hideHelm; Player.Instance.RefreshLook(); Player.Instance.Commit(); }, null, 18, new Vector2(1, 1));
+            helmText = helm.GetComponentInChildren<Text>();
+
+            // the Power change banner across the hero
+            banner = UIB.Rect("PowerChange", stage, new Vector2(0.5f, 0), new Vector2(0, 150), new Vector2(620, 70), new Vector2(0.5f, 0.5f));
+            UIB.Image(banner, new Color(0.15f, 0.35f, 0.85f, 0.85f), Skin.Banner).raycastTarget = false;
+            bannerText = UIB.Label(banner, "", 34, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(620, 70), TextAnchor.MiddleCenter);
+            bannerText.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            bannerText.fontStyle = FontStyle.BoldAndItalic;
+            bannerText.raycastTarget = false;
+            banner.gameObject.SetActive(false);
+
+            // item card (over the left of the hero)
+            card = UIB.Rect("ItemCard", stage, TL, new Vector2(10, -56), new Vector2(380, 590));
+            Skin.Sliced(card, Skin.Panel, Color.white).raycastTarget = true; // blocks taps from reaching the hero behind
+            card.gameObject.SetActive(false);
 
             // bag
-            bagTitle = Skin.Title(panel, "", 26, TL, new Vector2(746, -92), new Vector2(300, 44), TextAnchor.MiddleLeft);
-            Skin.Sliced(UIB.Rect("BagBox", panel, TL, new Vector2(742, -146), new Vector2(796, 622)), Skin.Inset, Color.white).raycastTarget = false;
-            bagRoot = UIB.Rect("Bag", panel, TL, new Vector2(778, -158), new Vector2(Cols * (Cell + CellGap), 600));
+            bagTitle = Skin.Title(panel, "", 26, TL, new Vector2(946, -92), new Vector2(130, 44), TextAnchor.MiddleLeft);
+            Skin.Sliced(UIB.Rect("BagBox", panel, TL, new Vector2(942, -146), new Vector2(596, 694)), Skin.Inset, Color.white).raycastTarget = false;
+            bagRoot = UIB.Rect("Bag", panel, TL, new Vector2(962, -160), new Vector2(Cols * (Cell + CellGap), 680));
 
-            // details of the picked item and what you can do with it
-            Skin.Sliced(UIB.Rect("DetailBox", panel, TL, new Vector2(22, -778), new Vector2(1516, 92)), Skin.Inset, Color.white).raycastTarget = false;
-            detail = UIB.Label(panel, "", 21, TL, new Vector2(40, -784), new Vector2(1020, 56), TextAnchor.UpperLeft);
-            detail.horizontalOverflow = HorizontalWrapMode.Wrap;
-            info = UIB.Label(panel, "", 20, TL, new Vector2(40, -838), new Vector2(1020, 28), TextAnchor.MiddleLeft);
+            info = UIB.Label(panel, "", 21, TL, new Vector2(34, -846), new Vector2(1490, 30), TextAnchor.MiddleLeft);
             info.color = Skin.Gold;
-            actions = UIB.Rect("Actions", panel, TL, new Vector2(1070, -784), new Vector2(460, 80));
 
             var bl = new Vector2(0, 0);
-            UIB.Button(panel, "Sell Junk", bl, new Vector2(30, 18), new Vector2(220, 62), new Color(0.6f, 0.45f, 0.15f),
+            UIB.Button(panel, "Sell Junk", bl, new Vector2(30, 14), new Vector2(220, 60), new Color(0.6f, 0.45f, 0.15f),
                 () => info.text = "Sold " + Player.Instance.SellCommons() + " items (kept Excellent/Ancient gear you can wear)", null, 24);
-            UIB.Button(panel, "Gems", bl, new Vector2(266, 18), new Vector2(200, 62), new Color(0.2f, 0.45f, 0.6f),
+            UIB.Button(panel, "Gems", bl, new Vector2(266, 14), new Vector2(200, 60), new Color(0.2f, 0.45f, 0.6f),
                 () => HUD.Instance.Open("Gems"), null, 24);
-            UIB.Button(panel, "Chaos Machine", bl, new Vector2(482, 18), new Vector2(230, 62), new Color(0.5f, 0.2f, 0.5f),
+            UIB.Button(panel, "Chaos Machine", bl, new Vector2(482, 14), new Vector2(230, 60), new Color(0.5f, 0.2f, 0.5f),
                 () => HUD.Instance.Open("Chaos"), null, 22);
-            UIB.Button(panel, "Wings", bl, new Vector2(728, 18), new Vector2(200, 62), new Color(0.25f, 0.4f, 0.3f),
+            UIB.Button(panel, "Wings", bl, new Vector2(728, 14), new Vector2(200, 60), new Color(0.25f, 0.4f, 0.3f),
                 () => HUD.Instance.Open("Wings"), null, 24);
-            UIB.Button(panel, "Reset Save", new Vector2(1, 0), new Vector2(-30, 18), new Vector2(220, 62), new Color(0.45f, 0.15f, 0.15f),
+            UIB.Button(panel, "Reset Save", new Vector2(1, 0), new Vector2(-30, 14), new Vector2(220, 60), new Color(0.45f, 0.15f, 0.15f),
                 () => { Player.Instance.ResetSave(); info.text = "Save reset"; }, null, 24, new Vector2(1, 0));
 
             Player.Instance.Changed += () => { if (root.activeSelf) Refresh(); };
@@ -107,7 +125,8 @@ namespace MuProto
             root.SetActive(true);
             root.transform.SetAsLastSibling();
             pickedEquip = pickedBag = -1;
-            info.text = "Tap an item to look at it, tap again to wear it. Drag the hero to turn.";
+            banner.gameObject.SetActive(false);
+            info.text = "Tap an item to see it, tap again to wear it. Drag the hero to turn.";
             var preview = GearPreview.Get();
             view.texture = preview.Texture;
             preview.Show(view);
@@ -130,7 +149,8 @@ namespace MuProto
             soul.text = "Soul " + d.jewelSoul;
             powerText.text = "Power " + p.CombatPower.ToString("N0");
             nameText.text = (string.IsNullOrEmpty(d.charName) ? p.Class.Name : d.charName) + "  <color=#c9b48a>" + GameData.LevelLabel(GameData.Power(d)) + "</color>";
-            bagTitle.text = "Bag  <size=22><color=#c9b48a>" + d.bag.Count + " / " + GameData.BagSize + "</color></size>";
+            helmText.text = d.hideHelm ? "Show Helm" : "Hide Helm";
+            bagTitle.text = "Bag  <size=22><color=#c9b48a>" + d.bag.Count + "/" + GameData.BagSize + "</color></size>";
             if (pickedBag >= d.bag.Count) pickedBag = -1;
             GearPreview.Get().Refresh();
 
@@ -138,7 +158,7 @@ namespace MuProto
             for (int i = 0; i < SlotOrder.Length; i++)
             {
                 int index = SlotOrder[i];
-                var pos = new Vector2((i / 5) * (Tile + Gap), -(i % 5) * (Tile + Gap));
+                var pos = new Vector2((i / 5) * (Tile + Gap), -(i % 5) * (Tile + 16));
                 if (index < 0) { WingsTile(pos); continue; }
                 var it = d.equipped[index];
                 string empty = index == GameData.Ring2Index ? "Ring" : GameData.SlotAt(index).ToString();
@@ -164,7 +184,7 @@ namespace MuProto
                 var tile = MakeTile(bagRoot, pos, Cell, it, "", pickedBag == i, !seen.Contains(it), better, () => PickBag(idx));
                 if (!usable) Tint(tile, new Color(0.6f, 0.1f, 0.1f, 0.45f));
             }
-            ShowDetail();
+            ShowCard();
         }
 
         Item Current(Item it)
@@ -179,7 +199,7 @@ namespace MuProto
         void PickEquip(int index)
         {
             var p = Player.Instance;
-            if (pickedEquip == index && !p.Data.equipped[index].IsEmpty) { seen.Add(p.Data.equipped[index]); info.text = p.Unequip(index); pickedEquip = -1; return; }
+            if (pickedEquip == index && !p.Data.equipped[index].IsEmpty) { TakeOff(index); return; }
             pickedEquip = index;
             pickedBag = -1;
             Refresh();
@@ -189,55 +209,164 @@ namespace MuProto
         {
             var p = Player.Instance;
             seen.Add(p.Data.bag[index]);
-            if (pickedBag == index) { seen.Add(Current(p.Data.bag[index])); info.text = p.Equip(index); pickedBag = -1; Refresh(); return; }
+            if (pickedBag == index) { Wear(index); return; }
             pickedBag = index;
             pickedEquip = -1;
             Refresh();
         }
 
-        void ShowDetail()
+        // ---- changing gear, with the Power change shown over the hero ----
+
+        void Wear(int bagIndex)
         {
-            Clear(actions);
             var p = Player.Instance;
-            var right = new Vector2(1, 0.5f);
-            if (pickedBag >= 0)
+            var it = p.Data.bag[bagIndex];
+            seen.Add(Current(it));
+            int before = p.CombatPower;
+            string msg = p.Equip(bagIndex);
+            info.text = msg;
+            pickedBag = -1;
+            if (p.Data.bag.Contains(it)) { Refresh(); return; } // could not wear it
+            Changed(before, it);
+        }
+
+        void TakeOff(int index)
+        {
+            var p = Player.Instance;
+            seen.Add(p.Data.equipped[index]);
+            int before = p.CombatPower;
+            info.text = p.Unequip(index);
+            pickedEquip = -1;
+            if (p.Data.equipped[index].IsEmpty) Changed(before, null);
+            else Refresh(); // bag full: nothing came off
+        }
+
+        void Enhance(int index)
+        {
+            var p = Player.Instance;
+            int before = p.CombatPower;
+            info.text = p.Enhance(index);
+            if (p.CombatPower != before) Changed(before, p.Data.equipped[index]);
+        }
+
+        void Changed(int before, Item worn)
+        {
+            Refresh();
+            int after = Player.Instance.CombatPower;
+            GearPreview.Get().Flash(worn != null ? GearVisual.TierSwatch(worn.classId, worn.tier) : Skin.Muted);
+            if (after == before) return;
+            if (bannerRun != null) HUD.Instance.StopCoroutine(bannerRun);
+            bannerRun = HUD.Instance.StartCoroutine(Banner(after, after - before));
+        }
+
+        IEnumerator Banner(int power, int diff)
+        {
+            bool up = diff > 0;
+            bannerText.text = "Power " + power.ToString("N0") + "   <color=" + (up ? "#9CFF7A" : "#FF7A6B") + ">" + (up ? "▲ " : "▼ ") + Mathf.Abs(diff).ToString("N0") + "</color>";
+            var img = banner.GetComponent<Image>();
+            var baseCol = up ? new Color(0.35f, 0.6f, 1f, 0.9f) : new Color(1f, 0.4f, 0.35f, 0.9f);
+            banner.gameObject.SetActive(true);
+            for (float t = 0; t < 2.8f; t += Time.unscaledDeltaTime)
             {
-                int idx = pickedBag;
-                var it = p.Data.bag[idx];
+                float slide = Mathf.Clamp01(t / 0.18f);
+                float fade = t < 2.2f ? 1f : 1f - (t - 2.2f) / 0.6f;
+                banner.anchoredPosition = new Vector2(Mathf.Lerp(-420f, 0f, 1f - (1f - slide) * (1f - slide)), 150f);
+                banner.localScale = Vector3.one * (t < 0.3f ? Mathf.Lerp(1.25f, 1f, t / 0.3f) : 1f);
+                img.color = new Color(baseCol.r, baseCol.g, baseCol.b, baseCol.a * fade);
+                var c = bannerText.color;
+                bannerText.color = new Color(c.r, c.g, c.b, fade);
+                yield return null;
+            }
+            banner.gameObject.SetActive(false);
+            bannerRun = null;
+        }
+
+        // ---- the item card ----
+
+        void ShowCard()
+        {
+            Clear(card);
+            var p = Player.Instance;
+            Item it = null;
+            int bagIdx = -1, equipIdx = -1;
+            if (pickedBag >= 0) { bagIdx = pickedBag; it = p.Data.bag[bagIdx]; }
+            else if (pickedEquip >= 0 && !p.Data.equipped[pickedEquip].IsEmpty) { equipIdx = pickedEquip; it = p.Data.equipped[equipIdx]; }
+            card.gameObject.SetActive(it != null);
+            if (it == null) return;
+
+            var rc = GameData.RarityColor(it.rarity);
+            var iconBox = UIB.Rect("Icon", card, TL, new Vector2(22, -22), new Vector2(104, 104));
+            UIB.Image(iconBox, Color.Lerp(rc, Color.black, 0.7f), Skin.Inset).type = Image.Type.Sliced;
+            var icon = UIB.Stretch(UIB.Rect("Pic", iconBox, Vector2.zero, Vector2.zero, Vector2.zero)).gameObject.AddComponent<RawImage>();
+            icon.texture = GearIcons.Get(it);
+            icon.raycastTarget = false;
+            var title = UIB.Label(card, "<b>" + it.Label + "</b>", 25, TL, new Vector2(140, -22), new Vector2(220, 60), TextAnchor.UpperLeft);
+            title.color = rc;
+            title.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var pw = UIB.Label(card, ItemPower(it).ToString("N0") + " <size=18>Power</size>", 30, TL, new Vector2(140, -84), new Vector2(220, 40), TextAnchor.MiddleLeft);
+            pw.color = Skin.Gold;
+            pw.fontStyle = FontStyle.Bold;
+            UIB.Label(card, "T" + it.tier + " " + GameData.TierName(it.tier) + " · " + GameData.RarityName(it.rarity) + " · " + it.slot, 18,
+                TL, new Vector2(22, -134), new Vector2(340, 26), TextAnchor.MiddleLeft).color = Skin.Muted;
+
+            var lines = new List<string>();
+            bool statOk = p.MainStatValue >= it.ReqStat, rbOk = p.Data.rebirth >= it.ReqRebirth;
+            bool classOk = string.IsNullOrEmpty(it.classId) || it.classId == p.Data.classId;
+            lines.Add("<color=#c9b48a>Requirements</color>");
+            if (!string.IsNullOrEmpty(it.classId)) lines.Add(Ok(classOk) + Classes.Get(it.classId).Name + " only</color>");
+            lines.Add(Ok(statOk) + p.Class.MainStat + " " + it.ReqStat + "</color>" + (it.ReqRebirth > 0 ? "   " + Ok(rbOk) + it.ReqRebirth + " Rebirth</color>" : ""));
+            lines.Add("<color=#c9b48a>Base</color>");
+            lines.Add(it.StatName + " " + it.Stat + (it.plus > 0 ? "  <color=#ffd860>(+" + it.plus + ")</color>" : "") + (it.life > 0 ? "   Option +" + it.life * 4 : ""));
+            string extras = Extras(it);
+            if (extras.Length > 0)
+            {
+                lines.Add("<color=#7CFF6B>Excellent / extras</color>");
+                foreach (var e in extras.Split('|')) lines.Add("<color=#9be88f>" + e.Trim() + "</color>");
+            }
+            if (bagIdx >= 0)
+            {
                 var cur = Current(it);
                 int diff = it.Stat - (cur.IsEmpty ? 0 : cur.Stat);
-                bool usable = p.CanEquip(it, out string why);
-                detail.text = Describe(it) + "   <color=" + (diff >= 0 ? "#7CFF6B" : "#FF6B5A") + ">" + (diff >= 0 ? "+" : "") + diff + " " + it.StatName + " vs worn</color>"
-                              + (usable ? "" : "   <color=#FF6B5A>" + why + "</color>");
-                if (usable)
-                    UIB.Button(actions, "Equip", right, new Vector2(0, 0), new Vector2(200, 72), new Color(0.2f, 0.5f, 0.22f),
-                        () => { seen.Add(cur); info.text = p.Equip(idx); pickedBag = -1; Refresh(); }, null, 28, new Vector2(1, 0.5f));
+                int pdiff = ItemPower(it) - (cur.IsEmpty ? 0 : ItemPower(cur));
+                lines.Add("");
+                lines.Add(cur.IsEmpty ? "<color=#9CFF7A>Nothing worn there</color>"
+                    : "vs worn: <color=" + (diff >= 0 ? "#9CFF7A>+" : "#FF7A6B>") + diff + " " + it.StatName + "</color>   <color=" + (pdiff >= 0 ? "#9CFF7A>▲" : "#FF7A6B>▼") + Mathf.Abs(pdiff) + " Power</color>");
             }
-            else if (pickedEquip >= 0 && !p.Data.equipped[pickedEquip].IsEmpty)
+            var body = UIB.Label(card, string.Join("\n", lines), 20, TL, new Vector2(22, -166), new Vector2(340, 330), TextAnchor.UpperLeft);
+            body.horizontalOverflow = HorizontalWrapMode.Wrap;
+            body.verticalOverflow = VerticalWrapMode.Truncate;
+            body.lineSpacing = 1.05f;
+
+            var bc = new Vector2(0.5f, 0);
+            if (bagIdx >= 0)
             {
-                int index = pickedEquip;
-                var it = p.Data.equipped[index];
-                detail.text = Describe(it);
-                UIB.Button(actions, "Take off", right, new Vector2(0, 0), new Vector2(180, 72), new Color(0.4f, 0.32f, 0.2f),
-                    () => { seen.Add(it); info.text = p.Unequip(index); pickedEquip = -1; Refresh(); }, null, 26, new Vector2(1, 0.5f));
+                bool usable = p.CanEquip(it, out _);
+                var b = UIB.Button(card, "Equip", bc, new Vector2(0, 22), new Vector2(220, 66), usable ? new Color(0.62f, 0.14f, 0.18f) : new Color(0.25f, 0.25f, 0.27f),
+                    () => Wear(bagIdx), null, 28, new Vector2(0.5f, 0));
+                b.interactable = usable;
+            }
+            else
+            {
+                UIB.Button(card, "Take off", bc, new Vector2(it.CanEnhance ? -92 : 0, 22), new Vector2(160, 66), new Color(0.4f, 0.32f, 0.2f),
+                    () => TakeOff(equipIdx), null, 24, new Vector2(0.5f, 0));
                 if (it.CanEnhance)
                 {
                     string jewel = it.UsesSoul ? "Soul " + Mathf.RoundToInt(it.EnhanceChance * 100) + "%" : "Bless";
-                    UIB.Button(actions, "+" + (it.plus + 1) + " " + jewel + "\n" + it.EnhanceGold.ToString("N0") + "g", right, new Vector2(-196, 0), new Vector2(240, 72),
-                        it.UsesSoul ? new Color(0.55f, 0.2f, 0.4f) : new Color(0.35f, 0.25f, 0.55f),
-                        () => info.text = p.Enhance(index), null, 21, new Vector2(1, 0.5f));
+                    UIB.Button(card, "+" + (it.plus + 1) + " " + jewel + "\n" + it.EnhanceGold.ToString("N0") + "g", bc, new Vector2(88, 22), new Vector2(170, 66),
+                        it.UsesSoul ? new Color(0.55f, 0.2f, 0.4f) : new Color(0.35f, 0.25f, 0.55f), () => Enhance(equipIdx), null, 19, new Vector2(0.5f, 0));
                 }
             }
-            else detail.text = pickedEquip >= 0 ? "Nothing equipped there." : "<color=#c9b48a>Equipped gear shows on your hero. The set glows from +7.</color>";
+            var x = UIB.Button(card, "X", new Vector2(1, 1), new Vector2(-8, -8), new Vector2(44, 44), new Color(0.3f, 0.12f, 0.1f),
+                () => { pickedBag = pickedEquip = -1; Refresh(); }, UIB.Circle, 22, new Vector2(1, 1));
         }
 
-        static string Describe(Item it)
+        static string Ok(bool ok) => ok ? "<color=#e8e2d0>" : "<color=#FF6B5A>";
+
+        // Roughly what the item adds to Combat Power (same weights as Player.CombatPower).
+        static int ItemPower(Item it)
         {
-            string hex = ColorUtility.ToHtmlStringRGB(GameData.RarityColor(it.rarity));
-            string extras = InventoryUI.Extras(it);
-            return "<color=#" + hex + "><b>" + it.Label + "</b></color>  " + GameData.RarityName(it.rarity) + " · " + GameData.TierName(it.tier) +
-                   "   " + it.StatName + " " + it.Stat + "   Req " + it.ReqStat + (it.ReqRebirth > 0 ? " · " + it.ReqRebirth + "R" : "") +
-                   (extras.Length > 0 ? "\n<size=18>" + extras + "</size>" : "");
+            int stat = it.StatName == "ATK" ? it.Stat * 4 : it.StatName == "DEF" ? it.Stat * 3 : it.Stat / 2;
+            return stat + it.plus * it.plus * 8 + (it.rarity == Rarity.Common ? 0 : 40);
         }
 
         void WingsTile(Vector2 pos)
@@ -248,7 +377,7 @@ namespace MuProto
             b.GetComponentInChildren<Text>().color = d.wingTier > 0 ? Skin.Cream : Skin.Muted;
         }
 
-        // An item square: rarity colour, a tier swatch, +level, short name, and NEW / UP marks.
+        // An item square: rarity background, a picture of the piece, tier, +level, and NEW / ▲ marks.
         static Button MakeTile(Transform parent, Vector2 pos, float size, Item it, string empty, bool picked, bool isNew, bool better, UnityEngine.Events.UnityAction onClick)
         {
             if (it.IsEmpty)
@@ -259,17 +388,24 @@ namespace MuProto
                 return e;
             }
             var rc = GameData.RarityColor(it.rarity);
-            var b = UIB.Button(parent, "", TL, pos, new Vector2(size, size), Color.Lerp(rc, Color.black, 0.72f), onClick, null, 16);
+            var b = UIB.Button(parent, "", TL, pos, new Vector2(size, size), Color.Lerp(rc, Color.black, 0.62f), onClick, null, 16);
             var edge = b.transform.Find("Edge");
             if (edge != null) edge.GetComponent<Image>().color = Color.Lerp(rc, Color.white, 0.15f);
 
-            var sw = UIB.Rect("Tier", b.transform, new Vector2(0.5f, 0.5f), new Vector2(0, 8), new Vector2(size * 0.46f, size * 0.46f), new Vector2(0.5f, 0.5f));
-            UIB.Image(sw, GearVisual.TierSwatch(it.classId, it.tier), Skin.Diamond).raycastTarget = false;
-            var kind = UIB.Label(b.transform, ShortName(it), 16, new Vector2(0.5f, 0), new Vector2(0, 4), new Vector2(size - 8, 22), TextAnchor.MiddleCenter);
-            kind.rectTransform.pivot = new Vector2(0.5f, 0);
-            kind.color = rc;
-            kind.raycastTarget = false;
-            var tier = UIB.Label(b.transform, "T" + it.tier, 16, TL, new Vector2(6, -4), new Vector2(40, 20), TextAnchor.UpperLeft);
+            var pic = UIB.Stretch(UIB.Rect("Pic", b.transform, Vector2.zero, Vector2.zero, Vector2.zero));
+            pic.offsetMin = new Vector2(6, 6);
+            pic.offsetMax = new Vector2(-6, -6);
+            var raw = pic.gameObject.AddComponent<RawImage>();
+            raw.texture = GearIcons.Get(it);
+            raw.raycastTarget = false;
+            if (raw.texture == null)
+            {
+                Object.Destroy(raw);
+                UIB.Image(UIB.Rect("Tier", b.transform, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(size * 0.46f, size * 0.46f), new Vector2(0.5f, 0.5f)),
+                    GearVisual.TierSwatch(it.classId, it.tier), Skin.Diamond).raycastTarget = false;
+            }
+            var tier = UIB.Label(b.transform, "T" + it.tier, 16, new Vector2(0, 0), new Vector2(6, 4), new Vector2(40, 20), TextAnchor.LowerLeft);
+            tier.rectTransform.pivot = Vector2.zero;
             tier.color = Skin.Cream;
             tier.raycastTarget = false;
             if (it.plus > 0)
@@ -282,7 +418,7 @@ namespace MuProto
             }
             if (better)
             {
-                var up = UIB.Label(b.transform, "▲", 20, new Vector2(1, 0), new Vector2(-6, 22), new Vector2(30, 24), TextAnchor.LowerRight);
+                var up = UIB.Label(b.transform, "▲", 22, new Vector2(1, 0), new Vector2(-6, 4), new Vector2(30, 24), TextAnchor.LowerRight);
                 up.rectTransform.pivot = new Vector2(1, 0);
                 up.color = new Color(0.45f, 1f, 0.4f);
                 up.raycastTarget = false;
@@ -299,13 +435,6 @@ namespace MuProto
             }
             if (picked) Outline(b.transform);
             return b;
-        }
-
-        static string ShortName(Item it)
-        {
-            string n = it.name;
-            int sp = n.LastIndexOf(' ');
-            return sp > 0 && n.Length > 12 ? n.Substring(sp + 1) : n;
         }
 
         static void Outline(Transform t)
@@ -366,7 +495,7 @@ namespace MuProto
         RawImage target;
         string cls;
         int wingCode = -1;
-        float yaw = 20f;
+        float yaw = 20f, pop;
 
         public static GearPreview Get()
         {
@@ -379,7 +508,7 @@ namespace MuProto
             var go = new GameObject("Gear Preview Stage");
             go.transform.position = new Vector3(0, 400f, 0);
             var gp = go.AddComponent<GearPreview>();
-            gp.Texture = new RenderTexture(440, 620, 24, RenderTextureFormat.ARGB32) { name = "Gear Preview", antiAliasing = 4 };
+            gp.Texture = new RenderTexture(640, 694, 24, RenderTextureFormat.ARGB32) { name = "Gear Preview", antiAliasing = 4 };
             gp.turntable = new GameObject("Turntable").transform;
             gp.turntable.SetParent(go.transform, false);
 
@@ -420,6 +549,15 @@ namespace MuProto
 
         public void Turn(float deg) => yaw += deg;
 
+        // Gear changed: a ring and a flash at the hero's feet, and a little bounce.
+        public void Flash(Color color)
+        {
+            Vector3 feet = turntable.position;
+            Fx.Shockwave(feet, 1.6f, color, Layer, cam);
+            Fx.Spark(feet + Vector3.up * 1.1f, color, 2.2f, Layer, cam);
+            pop = 1f;
+        }
+
         public void Refresh()
         {
             var p = Player.Instance;
@@ -457,6 +595,8 @@ namespace MuProto
             cam.enabled = on;
             if (!on) return;
             turntable.localRotation = Quaternion.Euler(0, yaw, 0);
+            pop = Mathf.Max(0f, pop - Time.unscaledDeltaTime * 4f);
+            turntable.localScale = Vector3.one * (1f + 0.06f * Mathf.Sin(pop * Mathf.PI));
             foreach (var l in GetComponentsInChildren<Light>()) l.cullingMask = 1 << Layer; // the aura's glow light too
         }
 
