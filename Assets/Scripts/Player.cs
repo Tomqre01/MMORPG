@@ -740,7 +740,6 @@ namespace MuProto
                     int n = HitArea(transform.position, sk.Radius, mult) + HitPlayersArea(transform.position, sk.Radius, mult, sk.Color);
                     if (n == 0) return false;
                     Effect.Ring(transform.position, sk.Radius, sk.Color);
-                    Fx.Shockwave(transform.position, sk.Radius, sk.Color);
                     StartCoroutine(SpinArcs(sk.Color, Mathf.Min(sk.Radius, 4.5f)));
                     if (sk.Radius >= 6f) // the big ones get a second wave
                         Effect.Ring(transform.position, sk.Radius * 0.6f, Color.Lerp(sk.Color, Color.white, 0.4f));
@@ -758,7 +757,6 @@ namespace MuProto
                     HitArea(c, sk.Radius, mult);
                     HitPlayersArea(c, sk.Radius, mult, sk.Color);
                     Effect.Ring(c, sk.Radius, sk.Color);
-                    Fx.Shockwave(c, sk.Radius, sk.Color);
                     break;
                 }
                 case SkillKind.Multi:

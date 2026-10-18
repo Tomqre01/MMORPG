@@ -245,15 +245,8 @@ namespace MuProto
     {
         float size, t;
 
-        public static void Ring(Vector3 position, float radius, Color color)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            Destroy(go.GetComponent<Collider>());
-            go.transform.position = new Vector3(position.x, 0.05f, position.z);
-            go.transform.localScale = new Vector3(0.1f, 0.02f, 0.1f);
-            Paint.Color(go, color);
-            go.AddComponent<Effect>().size = radius * 2f;
-        }
+        // Now drawn as a glowing additive shockwave (Fx); the old solid disc covered the fight.
+        public static void Ring(Vector3 position, float radius, Color color) => Fx.Shockwave(position, radius, color);
 
         void Update()
         {
