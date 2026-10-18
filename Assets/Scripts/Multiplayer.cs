@@ -15,6 +15,7 @@ namespace MuProto
         public string n;   // name
         public string c;   // class id
         public int lv, w;  // level, wings level
+        public int pt;     // pet level, 0 = no pet
         public float x, z, ry;
         public int a;      // 0 idle, 1 attack, 2 dead
     }
@@ -144,6 +145,7 @@ namespace MuProto
                 c = p.Class.Id,
                 lv = p.Data.level,
                 w = p.Data.wingsLevel,
+                pt = p.Data.petLevel,
                 x = p.transform.position.x,
                 z = p.transform.position.z,
                 ry = p.transform.eulerAngles.y,
@@ -156,7 +158,7 @@ namespace MuProto
         }
 
         static bool SameAs(PlayerState a, PlayerState b) =>
-            a.c == b.c && a.lv == b.lv && a.w == b.w && a.a == b.a &&
+            a.c == b.c && a.lv == b.lv && a.w == b.w && a.pt == b.pt && a.a == b.a &&
             Mathf.Abs(a.x - b.x) < 0.02f && Mathf.Abs(a.z - b.z) < 0.02f && Mathf.Abs(Mathf.DeltaAngle(a.ry, b.ry)) < 2f;
 
         void Remove(string sessionId)
@@ -184,6 +186,7 @@ namespace MuProto
     {
         Transform body, wings;
         ModelAnimator anim;
+        RemotePet pet;
         RectTransform plate;
         Text plateText;
         PlayerState state;
@@ -219,6 +222,8 @@ namespace MuProto
                 if (wings != null) Destroy(wings.gameObject);
                 wings = Player.MakeWings(transform, st.w);
             }
+            if (st.pt > 0 && pet == null) pet = RemotePet.Create(transform);
+            else if (st.pt <= 0 && pet != null) { Destroy(pet.gameObject); pet = null; }
             plateText.text = "Lv " + st.lv + " " + Classes.Get(st.c).Name + "  " + st.n;
             if (st.a == 1 && anim != null) anim.Play(ModelAnimator.Anim.Attack, false, 0.5f);
         }
@@ -255,7 +260,55 @@ namespace MuProto
         public void Remove()
         {
             if (plate != null) Destroy(plate.gameObject);
+            if (pet != null) Destroy(pet.gameObject);
             Destroy(gameObject);
+        }
+    }
+
+    // Another player's pet: walks behind its owner's left shoulder like our own Pet, worked out on this side
+    // from the owner's synced position, so it costs nothing on the network.
+    public class RemotePet : MonoBehaviour
+    {
+        Transform owner;
+        ModelAnimator anim;
+        bool isModel, walking;
+        Transform visual;
+
+        public static RemotePet Create(Transform owner)
+        {
+            var rp = new GameObject("Other Pet").AddComponent<RemotePet>();
+            rp.owner = owner;
+            rp.transform.position = rp.Slot;
+            rp.transform.rotation = owner.rotation;
+            rp.visual = Pet.MakeVisual(rp.transform, out rp.anim, out rp.isModel);
+            return rp;
+        }
+
+        Vector3 Slot => owner.position + owner.rotation * new Vector3(-1.1f, 0, -1.1f);
+
+        void Update()
+        {
+            if (owner == null) { Destroy(gameObject); return; }
+            float dt = Time.deltaTime;
+            Vector3 to = Slot - transform.position;
+            to.y = 0;
+            float dist = to.magnitude;
+            if (dist > 25f) { transform.position = Slot; walking = false; }
+            else
+            {
+                if (dist > 1.2f) walking = true;
+                else if (dist < 0.25f) walking = false;
+                if (walking)
+                {
+                    float speed = Mathf.Clamp(dist * 2.5f, 2f, 9f);
+                    transform.position += to / dist * Mathf.Min(dist, speed * dt);
+                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(to / dist), 10f * dt);
+                }
+                else
+                    transform.rotation = Quaternion.Slerp(transform.rotation, owner.rotation, 4f * dt);
+            }
+            if (anim != null) anim.Play(walking ? ModelAnimator.Anim.Move : ModelAnimator.Anim.Idle);
+            if (!isModel) visual.localPosition = Vector3.up * (0.8f + Mathf.Sin(Time.time * 4f) * 0.12f);
         }
     }
 }
