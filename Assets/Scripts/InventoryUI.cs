@@ -31,6 +31,11 @@ namespace MuProto
         int pickedEquip = -1, pickedBag = -1;
         bool firstOpen = true;
         Coroutine bannerRun;
+        // Selling: one item from its card (a second tap confirms good gear), or a whole grade at once.
+        int confirmSell = -1;
+        readonly bool[] sellGrades = { true, false, false };
+        RectTransform sellBox;
+        bool sellOpen;
 
         public InventoryUI(Transform canvas)
         {
@@ -93,8 +98,11 @@ namespace MuProto
             info.color = Skin.Gold;
 
             var bl = new Vector2(0, 0);
-            UIB.Button(panel, "Sell Junk", bl, new Vector2(30, 14), new Vector2(220, 60), new Color(0.6f, 0.45f, 0.15f),
-                () => info.text = "Sold " + Player.Instance.SellCommons() + " items (kept Excellent/Ancient gear you can wear)", null, 24);
+            UIB.Button(panel, "Sell", bl, new Vector2(30, 14), new Vector2(220, 60), new Color(0.6f, 0.45f, 0.15f),
+                () => { sellOpen = !sellOpen; pickedBag = pickedEquip = -1; Refresh(); }, null, 26);
+            sellBox = UIB.Rect("SellBox", panel, TL, new Vector2(310, -616), new Vector2(600, 210));
+            Skin.Sliced(sellBox, Skin.Panel, Color.white).raycastTarget = true;
+            sellBox.gameObject.SetActive(false);
             UIB.Button(panel, "Gems", bl, new Vector2(266, 14), new Vector2(200, 60), new Color(0.2f, 0.45f, 0.6f),
                 () => HUD.Instance.Open("Gems"), null, 24);
             UIB.Button(panel, "Chaos Machine", bl, new Vector2(482, 14), new Vector2(230, 60), new Color(0.5f, 0.2f, 0.5f),
@@ -183,7 +191,9 @@ namespace MuProto
                 bool better = usable && (current.IsEmpty || it.Stat > current.Stat);
                 var tile = MakeTile(bagRoot, pos, Cell, it, "", pickedBag == i, !seen.Contains(it), better, () => PickBag(idx));
                 if (!usable) Tint(tile, new Color(0.6f, 0.1f, 0.1f, 0.45f));
+                if (sellOpen && sellGrades[(int)it.rarity]) SellMark(tile);
             }
+            ShowSellBox();
             ShowCard();
         }
 
@@ -211,6 +221,7 @@ namespace MuProto
             seen.Add(p.Data.bag[index]);
             if (pickedBag == index) { Wear(index); return; }
             pickedBag = index;
+            confirmSell = -1;
             pickedEquip = -1;
             Refresh();
         }
@@ -341,9 +352,20 @@ namespace MuProto
             if (bagIdx >= 0)
             {
                 bool usable = p.CanEquip(it, out _);
-                var b = UIB.Button(card, "Equip", bc, new Vector2(0, 22), new Vector2(220, 66), usable ? new Color(0.62f, 0.14f, 0.18f) : new Color(0.25f, 0.25f, 0.27f),
+                var b = UIB.Button(card, "Equip", bc, new Vector2(-84, 22), new Vector2(170, 66), usable ? new Color(0.62f, 0.14f, 0.18f) : new Color(0.25f, 0.25f, 0.27f),
                     () => Wear(bagIdx), null, 28, new Vector2(0.5f, 0));
                 b.interactable = usable;
+                bool precious = it.rarity != Rarity.Common || it.plus >= 7;
+                bool asking = confirmSell == bagIdx;
+                UIB.Button(card, asking ? "Sure? Sell" : "Sell\n" + it.SellPrice.ToString("N0") + "g", bc, new Vector2(94, 22), new Vector2(170, 66),
+                    asking ? new Color(0.75f, 0.2f, 0.12f) : new Color(0.55f, 0.42f, 0.14f),
+                    () =>
+                    {
+                        if (precious && confirmSell != bagIdx) { confirmSell = bagIdx; Refresh(); return; }
+                        confirmSell = -1;
+                        pickedBag = -1;
+                        info.text = Player.Instance.SellItem(bagIdx);
+                    }, null, asking ? 24 : 21, new Vector2(0.5f, 0));
             }
             else
             {
@@ -358,6 +380,51 @@ namespace MuProto
             }
             var x = UIB.Button(card, "X", new Vector2(1, 1), new Vector2(-8, -8), new Vector2(44, 44), new Color(0.3f, 0.12f, 0.1f),
                 () => { pickedBag = pickedEquip = -1; Refresh(); }, UIB.Circle, 22, new Vector2(1, 1));
+        }
+
+        // ---- selling a whole grade ----
+
+        static readonly string[] GradeNames = { "Normal", "Excellent", "Ancient" };
+
+        void ShowSellBox()
+        {
+            sellBox.gameObject.SetActive(sellOpen);
+            if (!sellOpen) return;
+            Clear(sellBox);
+            var p = Player.Instance;
+            int n = 0, gold = 0;
+            foreach (var it in p.Data.bag)
+                if (sellGrades[(int)it.rarity]) { n++; gold += it.SellPrice; }
+            UIB.Label(sellBox, "Sell every item of the ticked grades (any tier, any +level)", 19, TL, new Vector2(20, -14), new Vector2(560, 28), TextAnchor.MiddleLeft).color = Skin.Cream;
+            for (int g = 0; g < 3; g++)
+            {
+                int grade = g;
+                var rc = GameData.RarityColor((Rarity)g);
+                var t = UIB.Button(sellBox, (sellGrades[g] ? "● " : "○ ") + GradeNames[g], TL, new Vector2(20 + g * 188, -52), new Vector2(176, 56),
+                    sellGrades[g] ? Color.Lerp(rc, Color.black, 0.45f) : new Color(0.14f, 0.13f, 0.15f), () => { sellGrades[grade] = !sellGrades[grade]; Refresh(); }, null, 22);
+                t.GetComponentInChildren<Text>().color = rc;
+            }
+            UIB.Label(sellBox, n + " items  ·  +" + gold.ToString("N0") + "g", 24, TL, new Vector2(20, -122), new Vector2(330, 40), TextAnchor.MiddleLeft).color = Skin.Gold;
+            UIB.Button(sellBox, "Sell " + n, TL, new Vector2(350, -116), new Vector2(150, 56), n > 0 ? new Color(0.62f, 0.2f, 0.12f) : new Color(0.25f, 0.25f, 0.27f),
+                () =>
+                {
+                    int sold = Player.Instance.SellBag(sellGrades, out int g2);
+                    sellOpen = false;
+                    info.text = "Sold " + sold + " items for " + g2.ToString("N0") + "g";
+                }, null, 24).interactable = n > 0;
+            UIB.Button(sellBox, "X", TL, new Vector2(516, -120), new Vector2(50, 50), new Color(0.3f, 0.12f, 0.1f),
+                () => { sellOpen = false; Refresh(); }, UIB.Circle, 22);
+        }
+
+        static void SellMark(Button b)
+        {
+            var o = UIB.Stretch(UIB.Rect("SellMark", b.transform, Vector2.zero, Vector2.zero, Vector2.zero));
+            UIB.Image(o, new Color(0.9f, 0.6f, 0.1f, 0.28f)).raycastTarget = false;
+            var t = UIB.Label(b.transform, "SELL", 15, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(60, 22), TextAnchor.MiddleCenter);
+            t.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            t.color = new Color(1f, 0.85f, 0.4f);
+            t.fontStyle = FontStyle.Bold;
+            t.raycastTarget = false;
         }
 
         static string Ok(bool ok) => ok ? "<color=#e8e2d0>" : "<color=#FF6B5A>";

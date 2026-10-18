@@ -1064,20 +1064,33 @@ namespace MuProto
             return "Equipped " + item.Label;
         }
 
-        public int SellCommons()
+        // Sells every bag item of the ticked grades (0 Normal, 1 Excellent, 2 Ancient), any tier or +level.
+        public int SellBag(bool[] grades, out int gold)
         {
             int sold = 0;
+            gold = 0;
             for (int i = Data.bag.Count - 1; i >= 0; i--)
             {
                 var it = Data.bag[i];
-                if (it.rarity != Rarity.Common && CanEquip(it, out _)) continue; // keep good gear you can wear
-                if (it.rarity == Rarity.Epic) continue;
-                Data.gold += it.SellPrice;
+                if (!grades[(int)it.rarity]) continue;
+                gold += it.SellPrice;
                 Data.bag.RemoveAt(i);
                 sold++;
             }
+            Data.gold += gold;
             Commit();
             return sold;
+        }
+
+        // Sells one bag item, whatever it is.
+        public string SellItem(int bagIndex)
+        {
+            if (bagIndex < 0 || bagIndex >= Data.bag.Count) return "Nothing there";
+            var it = Data.bag[bagIndex];
+            Data.bag.RemoveAt(bagIndex);
+            Data.gold += it.SellPrice;
+            Commit();
+            return "Sold " + it.Label + " for " + it.SellPrice.ToString("N0") + "g";
         }
 
         // Jewel of Bless for +1..+6 (always works), Jewel of Soul for +7 and up (can fail and drop a level).
