@@ -325,7 +325,7 @@ namespace MuProto
             if (p.Data.gold < 30000) { done("Founding a guild costs 30000 Zen"); return; }
             try
             {
-                await Online.Client.CreateGroupAsync(Online.Session, name, "MU guild", null, null, true, 50);
+                await Online.Client.CreateGroupAsync(Online.Session, name, "King of Origin guild", null, null, true, 50);
                 p.Data.gold -= 30000;
                 p.Commit();
                 await LoadGuild();

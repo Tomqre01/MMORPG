@@ -61,7 +61,7 @@
   - ฆ่าผู้เล่นที่ชื่อไม่แดง = ได้ **ชื่อแดง** (PK 1 แต้ม หายเองทีละแต้มทุก 5 นาที)
   - ชื่อแดงโดนทุกคนตีได้แม้ไม่ได้เปิด PK และเวลาตายเสีย Zen 10% และอาจทำของในกระเป๋าหล่น
   - ฆ่าคนชื่อแดงได้ค่าหัว ไม่โดนโทษ
-  - ในเมือง Lorencia (วงหินกลางแมพ) ตีกันไม่ได้ มอนไม่ตามเข้า และฟื้นเลือดเร็ว
+  - ในเมือง Aurelion (วงหินกลางแมพ) ตีกันไม่ได้ มอนไม่ตามเข้า และฟื้นเลือดเร็ว
 
 ## 6. แผนที่และวาร์ป
 ปุ่ม **Teleport** วาร์ปได้ 10 แผนที่ตามเซิร์ฟเวอร์ (เสีย Zen ตามแผนที่) แต่ละแผนที่มีเมืองปลอดภัยตรงกลางและพ่อค้า
@@ -69,7 +69,7 @@
 
 | แผนที่ | เข้าได้ |
 |---|---|
-| Lorencia | Lv1 |
+| Aurelion | Lv1 |
 | Noria | Lv20 |
 | Devias | Lv40 |
 | Dungeon | Lv65 |
@@ -142,7 +142,7 @@ saves screenshots of the HUD and the main windows to `Assets/UIShots` (ignored b
 `Assets/Scripts/MapData.cs` is generated from the MU Origin server files (`D:\MU_Server7\Config`) by
 `Tools/ServerImport/gen_maps.py` (run it on the PC that has the server folder, from `MU_Server7\Config`).
 
-- **10 field maps**, matching server map codes 1–10: Lorencia, Noria, Devias, Dungeon, Lost Tower, Atlans, Tarkan, Icarus, Aida, Kanturu Ruins.
+- **10 field maps**, matching server map codes 1–10: Aurelion, Noria, Devias, Dungeon, Lost Tower, Atlans, Tarkan, Icarus, Aida, Kanturu Ruins.
 - **Monsters per map:** each normal monster type (MonsterType 101) becomes a zone with its Thai name (`SName`) and level.
   The zone sits where that type spawns on the server, measured from the town (`MapConfig.xml` birth point) and scaled to the 96 m map.
 - **Elites** (`ชั้นยอด·`, MonsterType 301) are single boss-strength monsters that respawn after a minute and pay boss rewards.

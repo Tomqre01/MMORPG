@@ -1,4 +1,7 @@
-# ต้นแบบเฟส 1: เกมแนว MU Origin (Unity)
+# King of Origin
+
+MMO-RPG 3D บนมือถือ ต้นแบบแบบเล่นได้ครบวงจร (vertical slice) ทำด้วย Unity 6.3 LTS (URP) และ C#
+เมืองหลวงของโลกเกมชื่อ **Aurelion**
 
 ต้นแบบเล่นคนเดียว ใช้รูปทรงพื้นฐานแทนงานภาพ เพื่อทดสอบว่าลูป "ตีมอน → ได้ของ → อัปพลัง" สนุกไหม
 ทุกอย่างสร้างจากโค้ด จึงไม่ต้องจัดฉากหรือทำ prefab เอง
@@ -13,7 +16,7 @@
 - **ปีก 4 Tier** ประจำคลาส อัปด้วย Condor Feather และเลื่อน Tier ด้วย Condor Flame เพิ่ม ATK DEF HP และความเร็ว
 - **Blood Castle**, **Devil Square** และ **World Boss** (Skeleton King / Gorgon ทุก 15 นาที ตีร่วมกันได้ทั้งเซิร์ฟเวอร์)
 - **Auto-Quest** (แตะแถบเควสต์), **ยาฟื้นพลังอัตโนมัติ**, **CP** รวมทุกอย่าง, **PK Mode** และชื่อแดง
-- **7 แผนที่** (Lorencia, Noria, Devias, Lost Tower, Atlans, Tarkan, Icarus) วาร์ปผ่านปุ่ม Map
+- **7 แผนที่** (Aurelion, Noria, Devias, Lost Tower, Atlans, Tarkan, Icarus) วาร์ปผ่านปุ่ม Map
 - ช่องใส่ของ 9 ช่อง, Excellent options, เซ็ต Ancient, Gem/Socket, Chaos Machine + Jewel of Life / Chaos
 - ปาร์ตี้ กิลด์ แชท เพื่อน ตั้งชื่อตัวละคร (ออนไลน์)
 - Chaos Castle, Golden Invasion, Arena, เช็กชื่อรายวัน, รางวัลออนไลน์, Achievement, Ranking

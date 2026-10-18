@@ -15,7 +15,7 @@ namespace MuProto
         {
             new MapDef
             {
-                Id = 0, ServerCode = 1, Name = "Lorencia", MinRebirth = 0, MinLevel = 1, Cost = 0, Center = new Vector3(0, 0, 0f),
+                Id = 0, ServerCode = 1, Name = "Aurelion", MinRebirth = 0, MinLevel = 1, Cost = 0, Center = new Vector3(0, 0, 0f),
                 Ground = C(0.32f, 0.5f, 0.27f), Town = C(0.62f, 0.58f, 0.5f), Tree = C(0.18f, 0.42f, 0.2f), Trunk = C(0.4f, 0.28f, 0.15f), MonsterTint = C(1f, 1f, 1f),
                 Zones = new[]
                 {

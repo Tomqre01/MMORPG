@@ -65,7 +65,7 @@ namespace MuProto.EditorTools
             yield return null;
             ScreenCapture.CaptureScreenshot(Path.Combine(dir, "Fight.png"));
             yield return new WaitForSecondsRealtime(0.5f);
-            // A close look at every model on Lorencia: stand next to each zone and take a picture.
+            // A close look at every model in Aurelion: stand next to each zone and take a picture.
             var p = Player.Instance;
             p.AutoBattle = false;
             int before = Maps.Current;
