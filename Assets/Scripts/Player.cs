@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -7,37 +8,136 @@ namespace MuProto
     {
         public static Player Instance { get; private set; }
 
-        const float MoveSpeed = 6f;
         const float AggroRange = 14f;
         const float RespawnDelay = 3f;
+        const float PotionCooldown = 1.5f;
+        const float PvpScale = 0.5f;          // players hit each other for half damage
+        const float PkPointSeconds = 300f;    // one PK point wears off every 5 minutes
 
         public PlayerSave Data { get; private set; }
         public bool AutoBattle { get; set; }
+        public bool PkMode { get; set; }
         public Vector2 MoveInput { get; set; } // written by the on-screen joystick
         public event System.Action Changed;
 
+        // Auto-quest: hunt in this zone (and only this monster, when set) until the quest is done.
+        public MonsterSpawner QuestZone { get; private set; }
+
         readonly float[] skillCd = new float[3];
         Monster target;
+        RemotePlayer pvpTarget;
         Vector3 spawnPoint;
         Transform body, wings;
-        float attackTimer, respawnTimer, lastHitTime, regenAcc, saveTimer;
+        Aura aura;
+        float attackTimer, respawnTimer, lastHitTime, regenAcc, saveTimer, potionCd;
+        float buffUntil, buffAtk, buffDef;
+        string lastAttackerSession, lastAttackerName;
+        float lastAttackerTime;
         bool dirty;
 
         public bool HasClass => !string.IsNullOrEmpty(Data.classId);
         public ClassDef Class => Classes.Get(Data.classId);
         public Monster Target => target;
-
-        public override int Atk => Mathf.RoundToInt((10 + Data.level * 3 + EquipStat(Slot.Weapon)) * Class.AtkMul) + Data.wingsLevel * 4;
-        public override int Def => Mathf.RoundToInt((Data.level + EquipStat(Slot.Armor) + EquipStat(Slot.Helm) + EquipStat(Slot.Boots)) * Class.DefMul) + Data.wingsLevel * 2;
-        public override int MaxHp => Mathf.RoundToInt((100 + Data.level * 25 + Def * 3) * Class.HpMul) + Data.wingsLevel * 30;
-        public int CombatPower => Atk * 5 + Def * 4 + MaxHp / 2 + Data.petLevel * 25;
+        public RemotePlayer PvpTarget => pvpTarget;
+        public bool IsRed => Data.pkPoints > 0;
+        public bool BuffActive => Time.time < buffUntil;
+        public float BuffLeft => Mathf.Max(0, buffUntil - Time.time);
+        public bool InTown => Bounds == FieldBounds && Flat(transform.position) < GameData.TownRadius;
         public float RespawnIn => respawnTimer;
 
-        int EquipStat(Slot s)
+        // ---- Stats ----
+
+        public int WingPower => Upgrades.WingPower(Data.wingTier, Data.wingLevel);
+        float AtkBuff => BuffActive ? 1f + buffAtk : 1f;
+        float DefBuff => BuffActive ? 1f + buffDef : 1f;
+
+        public override int Atk
+        {
+            get
+            {
+                var c = Class;
+                float raw = Data.str * c.StrAtk + Data.agi * c.AgiAtk + Data.ene * c.EneAtk + GearStat(Slot.Weapon) + WingPower * 5;
+                return Mathf.RoundToInt(raw * AtkBuff);
+            }
+        }
+
+        public override int Def
+        {
+            get
+            {
+                float armor = GearStat(Slot.Armor) + GearStat(Slot.Helm) + GearStat(Slot.Boots);
+                return Mathf.RoundToInt(((Data.agi / 3f + Data.vit / 5f + armor) * Class.DefMul + WingPower * 3) * DefBuff);
+            }
+        }
+
+        public override int MaxHp
+        {
+            get
+            {
+                var c = Class;
+                return Mathf.RoundToInt(c.BaseHp + Data.vit * c.HpPerVit + Data.level * c.HpPerLevel + Data.rebirth * 200 + WingPower * 40);
+            }
+        }
+
+        public float AttackInterval => Class.AttackInterval / Mathf.Min(2.2f, 1f + Data.agi * 0.0015f);
+        public float MoveSpeed => 6f + Class.MoveBonus + Upgrades.WingSpeed(Data.wingTier, Data.wingLevel);
+
+        public float SkillPower(int i)
+        {
+            float p = 1f + 0.06f * (Data.skillLevels[i] - 1);
+            if (Class.MainStat != "ENE") p *= 1f + Data.ene * 0.001f; // energy sharpens everyone's skills a little
+            return p;
+        }
+
+        // Everything in one number: level, rebirth, stats, skills, gear, enhancement, wings and pet.
+        public int CombatPower
+        {
+            get
+            {
+                int skills = 0;
+                foreach (int lv in Data.skillLevels) skills += lv - 1;
+                int plus = 0;
+                foreach (var it in Data.equipped) if (!it.IsEmpty) plus += it.plus * it.plus * 8;
+                return Atk * 4 + Def * 3 + MaxHp / 2 + Data.level * 10 + Data.rebirth * 1000
+                       + skills * 60 + plus + WingPower * 60 + Data.petLevel * 25;
+            }
+        }
+
+        // The armour set glows from +7: the lowest enhance level among armour, helm and boots.
+        public int GlowPlus
+        {
+            get
+            {
+                int min = int.MaxValue;
+                for (int s = 1; s < 4; s++)
+                {
+                    var it = Data.equipped[s];
+                    if (it.IsEmpty) return 0;
+                    min = Mathf.Min(min, it.plus);
+                }
+                return min;
+            }
+        }
+
+        public int MainStatValue => Class.MainStat == "STR" ? Data.str : Class.MainStat == "AGI" ? Data.agi : Data.ene;
+
+        public bool CanEquip(Item it, out string why)
+        {
+            why = null;
+            if (it.IsEmpty) return false;
+            if (!string.IsNullOrEmpty(it.classId) && it.classId != Data.classId) why = "For " + Classes.Get(it.classId).Name + " only";
+            else if (Data.rebirth < it.ReqRebirth) why = "Needs " + it.ReqRebirth + " Rebirth";
+            else if (MainStatValue < it.ReqStat) why = "Needs " + Class.MainStat + " " + it.ReqStat;
+            return why == null;
+        }
+
+        int GearStat(Slot s)
         {
             var it = Data.equipped[(int)s];
-            return it.IsEmpty ? 0 : it.Stat;
+            return it.IsEmpty || !CanEquip(it, out _) ? 0 : it.Stat;
         }
+
+        // ---- Setup ----
 
         public static Player Create(Vector3 position)
         {
@@ -61,16 +161,18 @@ namespace MuProto
         {
             if (body != null) Destroy(body.gameObject);
             body = MakeBody(transform, Class, out anim);
+            aura = Aura.Attach(body, Class.BodyColor);
+            aura.SetLevel(HasClass ? GlowPlus : 0);
             BuildWings();
         }
 
         void BuildWings()
         {
             if (wings != null) Destroy(wings.gameObject);
-            wings = MakeWings(transform, Data.wingsLevel);
+            wings = MakeWings(transform, Data.wingTier, Data.wingLevel);
         }
 
-        // Model per class (Resources/Models/Knight, Mage, Archer, or Player), else placeholder shapes.
+        // Model per class (Resources/Models/DarkKnight, DarkWizard, Elf, or Player), else placeholder shapes.
         // Also used for other players seen online (RemotePlayer).
         public static Transform MakeBody(Transform parent, ClassDef cls, out ModelAnimator animator)
         {
@@ -83,12 +185,12 @@ namespace MuProto
 
             animator = null;
             Part(body, PrimitiveType.Capsule, new Vector3(0, 1f, 0), Vector3.one, cls.BodyColor);
-            if (cls.Id == "Mage")
+            if (cls.Id == "DarkWizard")
             {
                 Part(body, PrimitiveType.Cylinder, new Vector3(0.55f, 1.1f, 0.2f), new Vector3(0.08f, 1f, 0.08f), new Color(0.45f, 0.3f, 0.15f));
                 Part(body, PrimitiveType.Sphere, new Vector3(0.55f, 2.15f, 0.2f), Vector3.one * 0.25f, new Color(0.4f, 0.8f, 1f));
             }
-            else if (cls.Id == "Archer")
+            else if (cls.Id == "Elf")
                 Part(body, PrimitiveType.Cube, new Vector3(0.5f, 1.1f, 0.35f), new Vector3(0.06f, 1.3f, 0.12f), new Color(0.5f, 0.32f, 0.15f));
             else
                 Part(body, PrimitiveType.Cube, new Vector3(0.55f, 1.1f, 0.45f), new Vector3(0.12f, 0.12f, 1.3f), new Color(0.85f, 0.85f, 0.9f));
@@ -105,27 +207,36 @@ namespace MuProto
             Paint.Color(go, color);
         }
 
-        // Two blades behind the back that grow and change colour every 10 levels. Null below level 1.
-        public static Transform MakeWings(Transform parent, int lv)
+        public static int WingCode(int tier, int level) => tier * 100 + level;
+        public static Transform MakeWings(Transform parent, int code) => MakeWings(parent, code / 100, code % 100);
+
+        // Feathered blades behind the back: more of them and bigger each tier, a little longer each level.
+        public static Transform MakeWings(Transform parent, int tier, int level)
         {
-            if (lv <= 0) return null;
+            if (tier <= 0) return null;
             var wings = new GameObject("Wings").transform;
             wings.SetParent(parent, false);
             wings.localPosition = new Vector3(0, 1.35f, -0.35f);
-            float size = 0.8f + Mathf.Min(lv, 50) * 0.02f;
-            var color = Upgrades.WingColor(lv);
+            float size = 0.75f + tier * 0.18f + level * 0.015f;
+            var color = Upgrades.WingColor(tier);
+            int feathers = Mathf.Min(tier + 1, 4);
             for (int side = -1; side <= 1; side += 2)
-            {
-                var w = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                Destroy(w.GetComponent<Collider>());
-                w.transform.SetParent(wings, false);
-                w.transform.localPosition = new Vector3(side * 0.55f * size, 0.2f, -0.1f);
-                w.transform.localRotation = Quaternion.Euler(0, side * 25f, side * -30f);
-                w.transform.localScale = new Vector3(1.1f * size, 0.6f * size, 0.04f);
-                Paint.Color(w, color);
-            }
+                for (int f = 0; f < feathers; f++)
+                {
+                    float k = 1f - f * 0.18f;
+                    var w = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    Destroy(w.GetComponent<Collider>());
+                    w.transform.SetParent(wings, false);
+                    w.transform.localPosition = new Vector3(side * 0.55f * size * k, 0.25f - f * 0.22f, -0.1f - f * 0.03f);
+                    w.transform.localRotation = Quaternion.Euler(0, side * 25f, side * (-30f + f * 22f));
+                    w.transform.localScale = new Vector3(1.15f * size * k, 0.42f * size, 0.04f);
+                    Paint.Color(w, Color.Lerp(color, Color.white, f * 0.15f));
+                }
+            if (tier >= 3) Aura.Attach(wings, color).SetLevel(tier >= 4 ? 9 : 7);
             return wings;
         }
+
+        // ---- Frame ----
 
         void Update()
         {
@@ -133,6 +244,7 @@ namespace MuProto
             saveTimer -= dt;
             if (dirty && saveTimer <= 0) Flush();
             if (!HasClass) return;
+            TickPk(dt);
 
             if (IsDead)
             {
@@ -143,7 +255,10 @@ namespace MuProto
 
             for (int i = 0; i < skillCd.Length; i++) skillCd[i] = Mathf.Max(0, skillCd[i] - dt);
             attackTimer -= dt;
+            potionCd -= dt;
             Regenerate(dt);
+            if (Data.autoPotion && Hp < MaxHp * 0.45f) UsePotion();
+            if (Hp > MaxHp) Hp = MaxHp;
 
             Vector2 input = MoveInput + KeyboardInput();
             if (input.sqrMagnitude > 1f) input.Normalize();
@@ -151,13 +266,32 @@ namespace MuProto
             if (input.sqrMagnitude > 0.01f)
             {
                 Step(new Vector3(input.x, 0, input.y), MoveSpeed * input.magnitude);
-                if (!AutoBattle) target = null;
+                QuestZone = null; // steering yourself ends the auto-quest walk
+                if (!AutoBattle) { target = null; pvpTarget = null; }
                 return;
             }
 
-            if (AutoBattle && (target == null || target.IsDead))
-                target = FindNearest(AggroRange) ?? FindNearest(200f);
+            if (pvpTarget != null)
+            {
+                if (!CanHit(pvpTarget) || FlatDistance(pvpTarget) > Class.AttackRange + 1.5f) pvpTarget = null;
+                else
+                {
+                    Face(pvpTarget.transform.position - transform.position);
+                    BasicAttack();
+                    return;
+                }
+            }
 
+            var goal = DungeonRun.Active != null ? DungeonRun.Active.AutoGoal : null;
+            if (AutoBattle && goal.HasValue)
+            {
+                Vector3 toGoal = goal.Value - transform.position;
+                toGoal.y = 0;
+                if (toGoal.magnitude > 1f) Step(toGoal, MoveSpeed);
+                return;
+            }
+
+            if (AutoBattle) PickAutoTarget();
             if (target == null || target.IsDead) return;
 
             float range = Class.AttackRange;
@@ -172,13 +306,45 @@ namespace MuProto
             Face(toTarget);
             if (AutoBattle)
                 for (int i = skillCd.Length - 1; i >= 0; i--)
+                {
+                    if (Class.Skills[i].Kind == SkillKind.Buff && BuffActive) continue;
                     if (UseSkill(i)) return;
+                }
             BasicAttack();
+        }
+
+        void PickAutoTarget()
+        {
+            if (QuestZone != null)
+            {
+                string only = Quests.MonsterFilter(Data);
+                if (target == null || target.IsDead || target.Spawner != QuestZone)
+                    target = FindNearest(transform.position, 200f, m => m.Spawner == QuestZone && (only == null || m.DisplayName == only));
+                if (target == null)
+                {
+                    Vector3 toZone = QuestZone.Center - transform.position;
+                    toZone.y = 0;
+                    if (toZone.magnitude > 2f) Step(toZone, MoveSpeed); // walk there and wait for respawns
+                }
+                return;
+            }
+            // Nearby first; otherwise go looking only for monsters you can handle (not a world boss).
+            if (target == null || target.IsDead)
+                target = FindNearest(transform.position, AggroRange, null)
+                         ?? FindNearest(transform.position, 200f, m => !m.IsWorldBoss && m.Level <= Data.level + 5);
+        }
+
+        public void StartQuestHunt(MonsterSpawner zone)
+        {
+            QuestZone = zone;
+            AutoBattle = zone != null;
+            target = null;
         }
 
         void Regenerate(float dt)
         {
             float rate = Time.time - lastHitTime > 3f ? 0.05f : 0.01f;
+            if (InTown) rate = 0.15f;
             regenAcc += MaxHp * rate * dt;
             int whole = (int)regenAcc;
             if (whole > 0)
@@ -186,6 +352,17 @@ namespace MuProto
                 regenAcc -= whole;
                 Hp = Mathf.Min(MaxHp, Hp + whole);
             }
+        }
+
+        void TickPk(float dt)
+        {
+            if (Data.pkPoints <= 0) return;
+            Data.pkClock -= dt;
+            if (Data.pkClock > 0) return;
+            Data.pkPoints--;
+            Data.pkClock = PkPointSeconds;
+            HUD.Message(Data.pkPoints > 0 ? "PK level down: " + Data.pkPoints : "Your name is no longer red", 3f);
+            Commit();
         }
 
         static Vector2 KeyboardInput()
@@ -201,15 +378,13 @@ namespace MuProto
 #endif
         }
 
-        Monster FindNearest(float maxDistance) => FindNearest(transform.position, maxDistance);
-
-        static Monster FindNearest(Vector3 from, float maxDistance)
+        static Monster FindNearest(Vector3 from, float maxDistance, System.Predicate<Monster> filter)
         {
             Monster best = null;
             float bestDist = maxDistance;
             foreach (var m in Monster.All)
             {
-                if (m.IsDead) continue;
+                if (m.IsDead || (filter != null && !filter(m))) continue;
                 float d = Flat(m.transform.position - from);
                 if (d < bestDist) { bestDist = d; best = m; }
             }
@@ -219,21 +394,48 @@ namespace MuProto
         static float Flat(Vector3 v) { v.y = 0; return v.magnitude; }
 
         Monster TargetWithin(float range) =>
-            target != null && !target.IsDead && FlatDistance(target) <= range ? target : FindNearest(range);
+            target != null && !target.IsDead && FlatDistance(target) <= range ? target : FindNearest(transform.position, range, null);
 
-        // Called by the Attack button: lock on to the nearest monster and keep hitting it.
+        // ---- Combat ----
+
+        bool CanHit(RemotePlayer rp) => rp != null && !InTown && rp.CanBeAttacked(PkMode);
+
+        RemotePlayer PvpWithin(float range)
+        {
+            if (CanHit(pvpTarget) && FlatDistance(pvpTarget) <= range) return pvpTarget;
+            return WorldSync.Instance != null && !InTown ? WorldSync.Instance.NearestAttackable(transform.position, range, PkMode) : null;
+        }
+
+        // Attack button: a player you may fight comes first (PK mode, or an outlaw), else the nearest monster.
         public void AttackPressed()
         {
             if (IsDead || !HasClass) return;
+            var rp = PvpWithin(Class.AttackRange + 1.5f);
+            if (rp != null)
+            {
+                pvpTarget = rp;
+                target = null;
+                BasicAttack();
+                return;
+            }
+            pvpTarget = null;
             target = TargetWithin(Class.AttackRange + 1.5f);
             if (target != null) BasicAttack();
         }
 
         void BasicAttack()
         {
-            if (attackTimer > 0 || target == null || target.IsDead || FlatDistance(target) > Class.AttackRange + 1.5f) return;
-            attackTimer = Class.AttackInterval;
-            PlayAction(ModelAnimator.Anim.Attack, Class.AttackInterval * 0.9f);
+            if (attackTimer > 0) return;
+            if (pvpTarget != null)
+            {
+                attackTimer = AttackInterval;
+                PlayAction(ModelAnimator.Anim.Attack, AttackInterval * 0.9f);
+                DealPvp(pvpTarget, 1f, Class.BodyColor, false);
+                return;
+            }
+            if (target == null || target.IsDead || FlatDistance(target) > Class.AttackRange + 1.5f) return;
+            attackTimer = AttackInterval;
+            PlayAction(ModelAnimator.Anim.Attack, AttackInterval * 0.9f);
             Deal(target, 1f, Class.BodyColor, false);
         }
 
@@ -250,33 +452,83 @@ namespace MuProto
             }
         }
 
+        // Another player: the hit is sent to their game, which applies their own DEF.
+        void DealPvp(RemotePlayer rp, float multiplier, Color color, bool ringOnHit)
+        {
+            int dmg = RollDamage(Atk, multiplier * PvpScale, out bool crit);
+            System.Action land = () =>
+            {
+                if (rp == null) return;
+                if (WorldSync.Instance != null) WorldSync.Instance.SendHit(rp, dmg, crit);
+                FloatingText.Spawn(rp.transform.position + Vector3.up * 2f, crit ? dmg + "!" : dmg.ToString(), new Color(1f, 0.55f, 0.2f), crit ? 44 : 34);
+                if (ringOnHit) Effect.Ring(rp.transform.position, 1.2f, color);
+            };
+            if (Class.Ranged) Projectile.Fire(transform.position + Vector3.up * 1.3f, rp.transform, color, () => rp != null, land);
+            else land();
+        }
+
         public float SkillCooldownRatio(int i) => skillCd[i] / Class.Skills[i].Cooldown;
 
         public bool UseSkill(int i)
         {
             if (IsDead || !HasClass || skillCd[i] > 0) return false;
             var sk = Class.Skills[i];
+            float mult = sk.Multiplier * SkillPower(i);
             switch (sk.Kind)
             {
                 case SkillKind.Single:
                 {
+                    var rp = PvpWithin(sk.Range);
+                    if (rp != null && pvpTarget == rp) { DealPvp(rp, mult, sk.Color, true); break; }
                     var t = TargetWithin(sk.Range);
                     if (t == null) return false;
                     target = t;
-                    Deal(t, sk.Multiplier, sk.Color, true);
+                    Deal(t, mult, sk.Color, true);
+                    break;
+                }
+                case SkillKind.Dash:
+                {
+                    Transform to;
+                    var rp = pvpTarget != null ? PvpWithin(sk.Range) : null;
+                    var t = rp == null ? TargetWithin(sk.Range) : null;
+                    if (rp != null) to = rp.transform;
+                    else if (t != null) { target = t; to = t.transform; }
+                    else return false;
+                    Vector3 d = to.position - transform.position;
+                    d.y = 0;
+                    Effect.Ring(transform.position, 1f, sk.Color);
+                    if (d.magnitude > sk.Radius)
+                    {
+                        Vector3 p = to.position - d.normalized * sk.Radius * 0.8f;
+                        p.x = Mathf.Clamp(p.x, Bounds.xMin, Bounds.xMax);
+                        p.z = Mathf.Clamp(p.z, Bounds.yMin, Bounds.yMax);
+                        transform.position = new Vector3(p.x, transform.position.y, p.z);
+                    }
+                    if (d.sqrMagnitude > 0.001f) transform.rotation = Quaternion.LookRotation(d.normalized);
+                    if (rp != null) DealPvp(rp, mult, sk.Color, true);
+                    else Deal(t, mult, sk.Color, true);
                     break;
                 }
                 case SkillKind.SelfArea:
-                    if (!HitArea(transform.position, sk.Radius, sk.Multiplier)) return false;
+                {
+                    int n = HitArea(transform.position, sk.Radius, mult) + HitPlayersArea(transform.position, sk.Radius, mult, sk.Color);
+                    if (n == 0) return false;
                     Effect.Ring(transform.position, sk.Radius, sk.Color);
+                    if (sk.Radius >= 6f) // the big ones get a second wave and a spin
+                    {
+                        Effect.Ring(transform.position, sk.Radius * 0.6f, Color.Lerp(sk.Color, Color.white, 0.4f));
+                        StartCoroutine(Spin(0.45f));
+                    }
                     break;
+                }
                 case SkillKind.TargetArea:
                 {
                     var t = TargetWithin(sk.Range);
                     if (t == null) return false;
                     target = t;
                     Vector3 c = t.transform.position;
-                    HitArea(c, sk.Radius, sk.Multiplier);
+                    HitArea(c, sk.Radius, mult);
+                    HitPlayersArea(c, sk.Radius, mult, sk.Color);
                     Effect.Ring(c, sk.Radius, sk.Color);
                     break;
                 }
@@ -285,9 +537,23 @@ namespace MuProto
                     var hits = new List<Monster>();
                     foreach (var m in Monster.All)
                         if (!m.IsDead && FlatDistance(m) <= sk.Range) hits.Add(m);
-                    if (hits.Count == 0) return false;
+                    var players = PlayersWithin(transform.position, sk.Range);
+                    if (hits.Count == 0 && players.Count == 0) return false;
                     hits.Sort((a, b) => FlatDistance(a).CompareTo(FlatDistance(b)));
-                    for (int n = 0; n < hits.Count && n < (int)sk.Radius; n++) Deal(hits[n], sk.Multiplier, sk.Color, false);
+                    int max = (int)sk.Radius;
+                    foreach (var rp in players) if (max-- > 0) DealPvp(rp, mult, sk.Color, false);
+                    for (int n = 0; n < hits.Count && max > 0; n++, max--) Deal(hits[n], mult, sk.Color, false);
+                    break;
+                }
+                case SkillKind.Buff:
+                {
+                    int lv = Data.skillLevels[i];
+                    buffUntil = Time.time + sk.Duration + 0.5f * (lv - 1);
+                    buffAtk = sk.BuffAtk + 0.01f * (lv - 1);
+                    buffDef = sk.BuffDef;
+                    Hp = Mathf.Min(MaxHp, Hp + Mathf.RoundToInt(MaxHp * sk.Heal));
+                    Effect.Ring(transform.position, 3f, sk.Color);
+                    FloatingText.Spawn(transform.position + Vector3.up * 3f, sk.Name.Replace("\n", " ") + "!", sk.Color, 40);
                     break;
                 }
             }
@@ -296,30 +562,114 @@ namespace MuProto
             return true;
         }
 
-        bool HitArea(Vector3 center, float radius, float multiplier)
+        IEnumerator Spin(float seconds)
+        {
+            var b = body;
+            for (float t = 0; t < seconds && b != null; t += Time.deltaTime)
+            {
+                b.localRotation = Quaternion.Euler(0, 360f * t / seconds, 0);
+                yield return null;
+            }
+            if (b != null) b.localRotation = Quaternion.identity;
+        }
+
+        int HitArea(Vector3 center, float radius, float multiplier)
         {
             var hits = new List<Monster>();
             foreach (var m in Monster.All)
                 if (!m.IsDead && Flat(m.transform.position - center) <= radius) hits.Add(m);
             foreach (var m in hits)
                 m.TakeDamage(RollDamage(Atk, multiplier, out bool crit), crit, this);
-            return hits.Count > 0;
+            return hits.Count;
         }
+
+        List<RemotePlayer> PlayersWithin(Vector3 center, float radius)
+        {
+            var list = new List<RemotePlayer>();
+            if (WorldSync.Instance == null || InTown) return list;
+            foreach (var rp in WorldSync.Instance.Remotes)
+                if (CanHit(rp) && Flat(rp.transform.position - center) <= radius) list.Add(rp);
+            return list;
+        }
+
+        int HitPlayersArea(Vector3 center, float radius, float multiplier, Color color)
+        {
+            var list = PlayersWithin(center, radius);
+            foreach (var rp in list) DealPvp(rp, multiplier, color, false);
+            return list.Count;
+        }
+
+        // ---- PvP (messages from WorldSync) ----
+
+        public void ReceivePvpHit(int raw, bool crit, string fromSession, string fromName)
+        {
+            if (IsDead || InTown || !HasClass) return;
+            lastAttackerSession = fromSession;
+            lastAttackerName = fromName;
+            lastAttackerTime = Time.time;
+            TakeDamage(raw, crit, null);
+        }
+
+        public void OnPvpKill(string victimName, bool victimWasRed)
+        {
+            if (victimWasRed)
+            {
+                int bounty = 500 + Data.level * 20;
+                Data.gold += bounty;
+                HUD.Message("Outlaw " + victimName + " defeated!  +" + bounty + "g", 3f);
+            }
+            else
+            {
+                Data.pkPoints++;
+                Data.pkClock = PkPointSeconds;
+                HUD.Message("You killed " + victimName + ". Your name is RED (PK " + Data.pkPoints + ")", 4f);
+            }
+            Commit();
+        }
+
+        // Outlaws (red names) lose gold, and maybe a bag item, whenever they die.
+        void RedPenalty()
+        {
+            int lost = Data.gold / 10;
+            Data.gold -= lost;
+            string msg = "Outlaw penalty: lost " + lost + "g";
+            if (Data.bag.Count > 0 && Random.value < 0.5f)
+            {
+                int i = Random.Range(0, Data.bag.Count);
+                msg += " and dropped " + Data.bag[i].Label;
+                Data.bag.RemoveAt(i);
+            }
+            HUD.Message(msg, 4f);
+        }
+
+        // ---- Rewards and progress ----
 
         public void OnKill(Monster m)
         {
             Vector3 p = m.transform.position + Vector3.up * 2.6f;
-            Data.exp += m.ExpReward;
             int gold = m.GoldReward;
             Data.gold += gold;
             FloatingText.Spawn(p, "+" + m.ExpReward + " EXP  +" + gold + "g", new Color(1f, 0.85f, 0.3f), 26);
+            AddExp(m.ExpReward);
 
-            if (Random.value < 0.35f) GiveItem(GameData.RollDrop(m.Level), p + Vector3.up);
-            if (Random.value < 0.15f) { Data.feathers++; FloatingText.Spawn(p + Vector3.up * 1.6f, "+1 Feather", Upgrades.WingColor(11), 24); }
-            if (Random.value < 0.15f) { Data.petFood++; FloatingText.Spawn(p + Vector3.up * 2.2f, "+1 Pet Food", new Color(1f, 0.6f, 0.8f), 24); }
+            float lv = m.Level;
+            if (Random.value < 0.3f) GiveItem(GameData.RollDrop(m.Level, Data, m.IsBoss ? 5f : 1f), p + Vector3.up);
+            if (Random.value < 0.03f + lv * 0.0004f) Loot(ref Data.jewelBless, "Jewel of Bless", new Color(0.75f, 0.45f, 1f), p, 1.6f);
+            if (Random.value < 0.015f + lv * 0.0003f) Loot(ref Data.jewelSoul, "Jewel of Soul", new Color(1f, 0.5f, 0.75f), p, 2f);
+            if (lv >= 5 && Random.value < 0.06f) Loot(ref Data.feathers, "Condor Feather", Upgrades.WingColor(1), p, 2.4f);
+            if (lv >= 20 && Random.value < 0.012f) Loot(ref Data.flames, "Condor Flame", new Color(1f, 0.45f, 0.15f), p, 2.8f);
+            if (Random.value < 0.12f) Loot(ref Data.petFood, "Pet Food", new Color(1f, 0.6f, 0.8f), p, 3.2f);
+            if (Random.value < 0.08f) Loot(ref Data.potions, "HP Potion", new Color(1f, 0.35f, 0.35f), p, 3.6f);
 
-            AddExp(0);
+            if (Data.level >= GameData.MaxLevel && m.Level >= GameData.RebirthKillMinLevel) Data.rebirthKills++;
+            Quests.OnKill(this, m);
             Commit();
+        }
+
+        static void Loot(ref int counter, string name, Color color, Vector3 p, float up)
+        {
+            counter++;
+            FloatingText.Spawn(p + Vector3.up * up, "+1 " + name, color, 24);
         }
 
         public void GiveItem(Item item, Vector3 textPos)
@@ -338,33 +688,117 @@ namespace MuProto
 
         public void AddExp(int amount)
         {
+            if (Data.level >= GameData.MaxLevel) { Data.exp = 0; return; }
             Data.exp += amount;
-            while (Data.exp >= GameData.ExpToNext(Data.level))
+            bool up = false;
+            while (Data.level < GameData.MaxLevel && Data.exp >= GameData.ExpToNext(Data.level, Data.rebirth))
             {
-                Data.exp -= GameData.ExpToNext(Data.level);
+                Data.exp -= GameData.ExpToNext(Data.level, Data.rebirth);
                 Data.level++;
-                Hp = MaxHp;
-                FloatingText.Spawn(transform.position + Vector3.up * 3f, "LEVEL UP! " + Data.level, new Color(0.4f, 1f, 0.4f), 52);
+                Data.freePoints += GameData.PointsPerLevel;
+                up = true;
             }
+            if (Data.level >= GameData.MaxLevel) Data.exp = 0;
+            if (!up) return;
+            Hp = MaxHp;
+            FloatingText.Spawn(transform.position + Vector3.up * 3f, "LEVEL UP! " + Data.level, new Color(0.4f, 1f, 0.4f), 52);
+            if (Data.level >= GameData.MaxLevel) HUD.Message("Level 100! Start the Rebirth quest in Character", 4f);
+            Quests.Check(this);
         }
 
         public void ChooseClass(string id)
         {
-            Data.classId = id;
+            GameData.StartClass(Data, Classes.Get(id));
             BuildBody();
             Hp = MaxHp;
             Commit();
         }
 
-        public void Equip(int bagIndex)
+        // ---- Stats and skills ----
+
+        public void AddStat(string stat, int amount)
+        {
+            amount = Mathf.Min(amount, Data.freePoints);
+            if (amount <= 0) return;
+            switch (stat)
+            {
+                case "STR": Data.str += amount; break;
+                case "AGI": Data.agi += amount; break;
+                case "VIT": Data.vit += amount; break;
+                default: Data.ene += amount; break;
+            }
+            Data.freePoints -= amount;
+            Commit();
+        }
+
+        // Spends all free points in the usual split for the class (main stat 3 : 1 : 1).
+        public void AutoAddStats()
+        {
+            string main = Class.MainStat;
+            string[] split = main == "STR" ? new[] { "STR", "STR", "STR", "AGI", "VIT" }
+                           : main == "AGI" ? new[] { "AGI", "AGI", "AGI", "STR", "VIT" }
+                           : new[] { "ENE", "ENE", "ENE", "VIT", "AGI" };
+            int i = 0;
+            while (Data.freePoints > 0) AddStat(split[i++ % split.Length], 1);
+        }
+
+        public string UpgradeSkill(int i)
+        {
+            int lv = Data.skillLevels[i];
+            if (lv >= Classes.MaxSkillLevel) return "Already max level";
+            int cost = Classes.SkillUpgradeGold(lv);
+            if (Data.gold < cost) return "Need " + cost + "g";
+            Data.gold -= cost;
+            Data.skillLevels[i]++;
+            Commit();
+            return Class.Skills[i].Name.Replace("\n", " ") + " is now Lv " + Data.skillLevels[i];
+        }
+
+        // ---- Rebirth ----
+
+        public string RebirthBlocker()
+        {
+            if (Data.rebirth >= GameData.MaxRebirth) return "Max rebirth reached";
+            if (Data.level < GameData.MaxLevel) return "Reach Lv " + GameData.MaxLevel;
+            if (Data.rebirthKills < GameData.RebirthKillsNeeded)
+                return "Quest: defeat Lv" + GameData.RebirthKillMinLevel + "+ monsters " + Data.rebirthKills + "/" + GameData.RebirthKillsNeeded;
+            if (Data.gold < GameData.RebirthGold(Data.rebirth)) return "Need " + GameData.RebirthGold(Data.rebirth) + "g";
+            return null;
+        }
+
+        public string Rebirth()
+        {
+            string blocker = RebirthBlocker();
+            if (blocker != null) return blocker;
+            Data.gold -= GameData.RebirthGold(Data.rebirth);
+            Data.rebirth++;
+            Data.level = 1;
+            Data.exp = 0;
+            Data.rebirthKills = 0;
+            Data.freePoints += GameData.RebirthBonusPoints;
+            Hp = MaxHp;
+            Effect.Ring(transform.position, 6f, new Color(1f, 0.9f, 0.4f));
+            Effect.Ring(transform.position, 3f, Color.white);
+            FloatingText.Spawn(transform.position + Vector3.up * 3f, "REBIRTH " + Data.rebirth + "R!", new Color(1f, 0.85f, 0.3f), 60);
+            Quests.Check(this);
+            Commit();
+            return "Rebirth " + Data.rebirth + "! +" + GameData.RebirthBonusPoints + " stat points, Tier " + (Data.rebirth + 1) + " gear unlocked";
+        }
+
+        // ---- Items ----
+
+        public string Equip(int bagIndex)
         {
             var item = Data.bag[bagIndex];
+            if (!CanEquip(item, out string why)) return why;
             var current = Data.equipped[(int)item.slot];
             Data.equipped[(int)item.slot] = item;
             Data.bag.RemoveAt(bagIndex);
             if (!current.IsEmpty) Data.bag.Insert(bagIndex, current);
             Hp = Mathf.Min(Hp, MaxHp);
+            RefreshLook();
             Commit();
+            return "Equipped " + item.Label;
         }
 
         public int SellCommons()
@@ -372,8 +806,10 @@ namespace MuProto
             int sold = 0;
             for (int i = Data.bag.Count - 1; i >= 0; i--)
             {
-                if (Data.bag[i].rarity != Rarity.Common) continue;
-                Data.gold += Data.bag[i].SellPrice;
+                var it = Data.bag[i];
+                if (it.rarity != Rarity.Common && CanEquip(it, out _)) continue; // keep good gear you can wear
+                if (it.rarity == Rarity.Epic) continue;
+                Data.gold += it.SellPrice;
                 Data.bag.RemoveAt(i);
                 sold++;
             }
@@ -381,28 +817,52 @@ namespace MuProto
             return sold;
         }
 
-        // Returns null when the attempt could not be made (no item, max level, not enough gold).
-        public bool? Enhance(Slot slot)
+        // Jewel of Bless for +1..+6 (always works), Jewel of Soul for +7 and up (can fail and drop a level).
+        public string Enhance(Slot slot)
         {
             var item = Data.equipped[(int)slot];
-            if (!item.CanEnhance || Data.gold < item.EnhanceCost) return null;
-            Data.gold -= item.EnhanceCost;
-            bool success = Random.value < item.EnhanceChance;
-            if (success) item.plus++;
+            if (item.IsEmpty) return "Nothing equipped";
+            if (!item.CanEnhance) return "Already +" + GameData.MaxPlus;
+            bool soul = item.UsesSoul;
+            if (soul ? Data.jewelSoul < 1 : Data.jewelBless < 1) return "Need a Jewel of " + (soul ? "Soul" : "Bless");
+            if (Data.gold < item.EnhanceGold) return "Need " + item.EnhanceGold + "g";
+            if (soul) Data.jewelSoul--; else Data.jewelBless--;
+            Data.gold -= item.EnhanceGold;
+            string result;
+            if (Random.value < item.EnhanceChance)
+            {
+                item.plus++;
+                result = "Success! " + item.Label;
+                if (item.plus == 7 || item.plus == 9 || item.plus == 11 || item.plus == 13) result += "  (it shines brighter)";
+            }
+            else
+            {
+                item.plus = Mathf.Max(0, item.plus - 1);
+                result = "Failed... dropped to +" + item.plus;
+            }
+            RefreshLook();
+            Quests.Check(this);
             Commit();
-            return success;
+            return result;
         }
 
-        public bool UpgradeWings()
+        public string UpgradeWings()
         {
-            int lv = Data.wingsLevel;
-            if (lv >= Upgrades.MaxWings || Data.feathers < Upgrades.WingFeathers(lv) || Data.gold < Upgrades.WingGold(lv)) return false;
-            Data.feathers -= Upgrades.WingFeathers(lv);
-            Data.gold -= Upgrades.WingGold(lv);
-            Data.wingsLevel++;
+            var step = Upgrades.NextWingStep(Data);
+            if (step == Upgrades.WingStep.Max) return "Wings are at max tier";
+            Upgrades.WingCost(Data, out int feathers, out int flames, out int gold);
+            if (Data.feathers < feathers || Data.flames < flames || Data.gold < gold) return "Not enough materials";
+            Data.feathers -= feathers;
+            Data.flames -= flames;
+            Data.gold -= gold;
+            if (step == Upgrades.WingStep.Craft) { Data.wingTier = 1; Data.wingLevel = 0; }
+            else if (step == Upgrades.WingStep.Level) Data.wingLevel++;
+            else { Data.wingTier++; Data.wingLevel = 0; }
             BuildWings();
+            Hp = Mathf.Min(Hp, MaxHp);
+            Quests.Check(this);
             Commit();
-            return true;
+            return step == Upgrades.WingStep.Level ? "Wings +" + Data.wingLevel : Class.Wings[Data.wingTier - 1] + "!";
         }
 
         public bool UpgradePet()
@@ -421,36 +881,84 @@ namespace MuProto
                 Data.gold -= Upgrades.PetGold(lv);
             }
             Data.petLevel++;
+            Quests.Check(this);
             Commit();
             return true;
         }
+
+        void RefreshLook()
+        {
+            if (aura != null) aura.SetLevel(GlowPlus);
+        }
+
+        // ---- Potions ----
+
+        public bool UsePotion()
+        {
+            if (IsDead || Data.potions <= 0 || potionCd > 0 || Hp >= MaxHp) return false;
+            int heal = Mathf.RoundToInt(MaxHp * Upgrades.PotionHeal);
+            Hp = Mathf.Min(MaxHp, Hp + heal);
+            Data.potions--;
+            potionCd = PotionCooldown;
+            FloatingText.Spawn(transform.position + Vector3.up * 2.4f, "+" + heal, new Color(0.4f, 1f, 0.4f), 30);
+            Commit();
+            return true;
+        }
+
+        public string BuyPotions(int count)
+        {
+            int cost = Upgrades.PotionPrice(Data.level) * count;
+            if (Data.gold < cost) return "Need " + cost + "g";
+            Data.gold -= cost;
+            Data.potions += count;
+            Commit();
+            return "Bought " + count + " HP Potions for " + cost + "g";
+        }
+
+        // ---- Daily dungeons ----
 
         static string Today => System.DateTime.Now.ToString("yyyy-MM-dd");
 
-        public int DungeonRunsLeft => Upgrades.DungeonRunsPerDay - (Data.dungeonDate == Today ? Data.dungeonRuns : 0);
+        public int BloodCastleLeft => Upgrades.BloodCastleRuns - (Data.bcDate == Today ? Data.bcRuns : 0);
+        public int DevilSquareLeft => Upgrades.DevilSquareRuns - (Data.dsDate == Today ? Data.dsRuns : 0);
 
-        public bool UseDungeonRun()
+        public bool UseRun(bool bloodCastle)
         {
-            if (DungeonRunsLeft <= 0) return false;
-            if (Data.dungeonDate != Today) { Data.dungeonDate = Today; Data.dungeonRuns = 0; }
-            Data.dungeonRuns++;
+            if ((bloodCastle ? BloodCastleLeft : DevilSquareLeft) <= 0) return false;
+            if (bloodCastle)
+            {
+                if (Data.bcDate != Today) { Data.bcDate = Today; Data.bcRuns = 0; }
+                Data.bcRuns++;
+            }
+            else
+            {
+                if (Data.dsDate != Today) { Data.dsDate = Today; Data.dsRuns = 0; }
+                Data.dsRuns++;
+            }
             Commit();
             return true;
         }
 
-        public void AddMaterials(int gold, int feathers, int petFood)
+        public void AddMaterials(int gold, int exp, int bless, int soul, int feathers, int flames)
         {
             Data.gold += gold;
+            Data.jewelBless += bless;
+            Data.jewelSoul += soul;
             Data.feathers += feathers;
-            Data.petFood += petFood;
+            Data.flames += flames;
+            AddExp(exp);
             Commit();
         }
+
+        public void Refill() => Hp = MaxHp;
 
         public void Teleport(Vector3 position, Rect bounds)
         {
             transform.position = position;
             Bounds = bounds;
             target = null;
+            pvpTarget = null;
+            QuestZone = null;
             if (Pet.Instance != null) Pet.Instance.SnapToOwner();
         }
 
@@ -483,6 +991,7 @@ namespace MuProto
         void Respawn()
         {
             Hp = MaxHp;
+            if (DungeonRun.Active != null) DungeonRun.Active.Leave();
             Teleport(spawnPoint, FieldBounds);
         }
 
@@ -494,6 +1003,17 @@ namespace MuProto
         {
             respawnTimer = RespawnDelay;
             target = null;
+            pvpTarget = null;
+            buffUntil = 0;
+            bool byPlayer = killer == null && lastAttackerSession != null && Time.time - lastAttackerTime < 6f;
+            if (byPlayer)
+            {
+                if (WorldSync.Instance != null) WorldSync.Instance.SendKilled(lastAttackerSession, IsRed);
+                HUD.Message("Killed by " + lastAttackerName, 3f);
+            }
+            if (IsRed) RedPenalty();
+            lastAttackerSession = null;
+            Commit();
         }
     }
 }

@@ -29,14 +29,18 @@ namespace MuProto
             return Mathf.RoundToInt(dmg);
         }
 
-        public void TakeDamage(int raw, bool crit, Combatant source)
+        // Returns the HP actually lost (after DEF), 0 if already dead.
+        public int TakeDamage(int raw, bool crit, Combatant source)
         {
-            if (IsDead) return;
+            if (IsDead) return 0;
             int dmg = Mathf.Max(1, raw - Def / 2);
-            Hp = Mathf.Max(0, Hp - dmg);
+            dmg = Mathf.Min(dmg, Hp);
+            Hp -= dmg;
             FloatingText.Spawn(transform.position + Vector3.up * 2f, crit ? dmg + "!" : dmg.ToString(), DamageColor(crit), crit ? 44 : 34);
+            OnHpLost(dmg, source);
             OnDamaged(source);
             if (Hp == 0) Die(source);
+            return dmg;
         }
 
         public float FlatDistance(Component other)
@@ -86,6 +90,7 @@ namespace MuProto
 
         protected abstract Color DamageColor(bool crit);
         protected virtual void OnDamaged(Combatant source) { }
+        protected virtual void OnHpLost(int amount, Combatant source) { }
         protected abstract void Die(Combatant killer);
     }
 }

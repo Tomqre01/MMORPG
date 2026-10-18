@@ -14,18 +14,28 @@ namespace MuProto
     {
         public string n;   // name
         public string c;   // class id
-        public int lv, w;  // level, wings level
+        public int lv, rb; // level, rebirths
+        public int w;      // wings: tier * 100 + level
         public int pt;     // pet level, 0 = no pet
+        public int g;      // armour set enhance level (glow)
+        public int h;      // HP percent
+        public int r;      // 1 = red name (outlaw)
+        public int k;      // 1 = PK mode on
+        public int cp;     // combat power
         public float x, z, ry;
         public int a;      // 0 idle, 1 attack, 2 dead
     }
 
-    // Phase 2, step 2: everyone who logs in joins one shared relayed match named "world"
-    // and sends their position; other players appear as RemotePlayer.
+    [Serializable] class HitMsg { public string t; public int d; public int c; public string n; }     // t = target session
+    [Serializable] class KillMsg { public string t; public string n; public int r; }                   // t = killer session
+    [Serializable] class BossMsg { public long c; public int d; public string n; }                     // cycle, total damage so far
+
+    // Everyone who logs in joins one shared relayed match named "world": positions, PvP hits,
+    // PK kills and world boss damage all travel through it.
     public class WorldSync : MonoBehaviour
     {
         const string WorldName = "world";
-        const long OpState = 1;
+        const long OpState = 1, OpHit = 2, OpKilled = 3, OpBoss = 4;
         const float SendInterval = 0.1f, Heartbeat = 1f, ReconnectDelay = 5f;
 
         public static WorldSync Instance { get; private set; }
@@ -39,6 +49,8 @@ namespace MuProto
         Canvas nameCanvas;
 
         public int OthersOnline => remotes.Count;
+        public IEnumerable<RemotePlayer> Remotes => remotes.Values.Where(r => r != null);
+        string MyName => Online.Session != null ? Online.Session.Username : "Player";
 
         public static void Create()
         {
@@ -105,19 +117,78 @@ namespace MuProto
 
         void OnState(IMatchState s)
         {
-            if (s.OpCode != OpState || s.UserPresence == null || match == null || s.UserPresence.SessionId == match.Self.SessionId) return;
-            PlayerState st;
-            try { st = JsonUtility.FromJson<PlayerState>(Encoding.UTF8.GetString(s.State)); }
-            catch { return; }
+            if (s.UserPresence == null || match == null || s.UserPresence.SessionId == match.Self.SessionId) return;
+            string from = s.UserPresence.SessionId;
+            string json = Encoding.UTF8.GetString(s.State);
+            try
+            {
+                switch (s.OpCode)
+                {
+                    case OpState: OnPlayerState(from, JsonUtility.FromJson<PlayerState>(json)); break;
+                    case OpHit:
+                    {
+                        var m = JsonUtility.FromJson<HitMsg>(json);
+                        if (m != null && m.t == match.Self.SessionId && Player.Instance != null)
+                            Player.Instance.ReceivePvpHit(m.d, m.c == 1, from, m.n);
+                        break;
+                    }
+                    case OpKilled:
+                    {
+                        var m = JsonUtility.FromJson<KillMsg>(json);
+                        if (m != null && m.t == match.Self.SessionId && Player.Instance != null)
+                            Player.Instance.OnPvpKill(m.n, m.r == 1);
+                        break;
+                    }
+                    case OpBoss:
+                    {
+                        var m = JsonUtility.FromJson<BossMsg>(json);
+                        if (m != null && WorldBoss.Instance != null) WorldBoss.Instance.OnRemoteDamage(from, m.n, m.c, m.d);
+                        break;
+                    }
+                }
+            }
+            catch (Exception e) { Debug.LogWarning("[Online] Bad message " + s.OpCode + ": " + e.Message); }
+        }
+
+        void OnPlayerState(string id, PlayerState st)
+        {
             if (st == null) return;
-            string id = s.UserPresence.SessionId;
             if (!remotes.TryGetValue(id, out var rp) || rp == null)
             {
                 Debug.Log("[Online] Player appeared: " + st.n + " Lv " + st.lv);
-                rp = RemotePlayer.Create(st, nameCanvas.transform);
+                rp = RemotePlayer.Create(id, st, nameCanvas.transform);
                 remotes[id] = rp;
             }
             rp.Apply(st);
+        }
+
+        void Send(long op, object msg)
+        {
+            if (match == null || socket == null) return;
+            socket.SendMatchStateAsync(match.Id, op, JsonUtility.ToJson(msg));
+        }
+
+        public void SendHit(RemotePlayer target, int damage, bool crit) =>
+            Send(OpHit, new HitMsg { t = target.SessionId, d = damage, c = crit ? 1 : 0, n = MyName });
+
+        public void SendKilled(string killerSession, bool iWasRed) =>
+            Send(OpKilled, new KillMsg { t = killerSession, n = MyName, r = iWasRed ? 1 : 0 });
+
+        public void SendBossDamage(long cycle, int totalDamage) =>
+            Send(OpBoss, new BossMsg { c = cycle, d = totalDamage, n = MyName });
+
+        public RemotePlayer NearestAttackable(Vector3 from, float range, bool pkMode)
+        {
+            RemotePlayer best = null;
+            float bestDist = range;
+            foreach (var rp in Remotes)
+            {
+                if (!rp.CanBeAttacked(pkMode)) continue;
+                Vector3 d = rp.transform.position - from;
+                d.y = 0;
+                if (d.magnitude <= bestDist) { bestDist = d.magnitude; best = rp; }
+            }
+            return best;
         }
 
         void Update()
@@ -141,11 +212,17 @@ namespace MuProto
             if (p == null || !p.HasClass) return;
             var st = new PlayerState
             {
-                n = Online.Session.Username,
+                n = MyName,
                 c = p.Class.Id,
                 lv = p.Data.level,
-                w = p.Data.wingsLevel,
+                rb = p.Data.rebirth,
+                w = Player.WingCode(p.Data.wingTier, p.Data.wingLevel),
                 pt = p.Data.petLevel,
+                g = p.GlowPlus,
+                h = Mathf.CeilToInt(100f * p.Hp / Mathf.Max(1, p.MaxHp)),
+                r = p.IsRed ? 1 : 0,
+                k = p.PkMode ? 1 : 0,
+                cp = p.CombatPower,
                 x = p.transform.position.x,
                 z = p.transform.position.z,
                 ry = p.transform.eulerAngles.y,
@@ -154,11 +231,12 @@ namespace MuProto
             if (last != null && SameAs(last, st) && Time.time - lastSent < Heartbeat) return;
             last = st;
             lastSent = Time.time;
-            socket.SendMatchStateAsync(match.Id, OpState, JsonUtility.ToJson(st));
+            Send(OpState, st);
         }
 
         static bool SameAs(PlayerState a, PlayerState b) =>
-            a.c == b.c && a.lv == b.lv && a.w == b.w && a.pt == b.pt && a.a == b.a &&
+            a.c == b.c && a.lv == b.lv && a.rb == b.rb && a.w == b.w && a.pt == b.pt && a.g == b.g && a.h == b.h &&
+            a.r == b.r && a.k == b.k && a.cp == b.cp && a.a == b.a &&
             Mathf.Abs(a.x - b.x) < 0.02f && Mathf.Abs(a.z - b.z) < 0.02f && Mathf.Abs(Mathf.DeltaAngle(a.ry, b.ry)) < 2f;
 
         void Remove(string sessionId)
@@ -187,19 +265,40 @@ namespace MuProto
         Transform body, wings;
         ModelAnimator anim;
         RemotePet pet;
-        RectTransform plate;
+        Aura aura;
+        RectTransform plate, hpFill;
         Text plateText;
         PlayerState state;
         Vector3 targetPos;
         float targetRot;
 
-        public static RemotePlayer Create(PlayerState st, Transform nameCanvas)
+        public string SessionId { get; private set; }
+        public string Name => state != null ? state.n : "";
+        public bool IsDead => state != null && state.a == 2;
+        public bool IsRed => state != null && state.r == 1;
+        public bool InTown
+        {
+            get
+            {
+                Vector3 p = transform.position;
+                p.y = 0;
+                return p.magnitude < GameData.TownRadius;
+            }
+        }
+
+        // Anyone may hit an outlaw; others only while you are in PK mode. Never inside town.
+        public bool CanBeAttacked(bool attackerPkMode) => state != null && !IsDead && !InTown && (attackerPkMode || IsRed);
+
+        public static RemotePlayer Create(string sessionId, PlayerState st, Transform nameCanvas)
         {
             var rp = new GameObject("Other Player").AddComponent<RemotePlayer>();
+            rp.SessionId = sessionId;
             rp.transform.position = rp.targetPos = new Vector3(st.x, 0, st.z);
             rp.transform.rotation = Quaternion.Euler(0, st.ry, 0);
-            rp.plate = UIB.Rect("Name", nameCanvas, Vector2.zero, Vector2.zero, new Vector2(400, 50), new Vector2(0.5f, 0));
-            rp.plateText = UIB.Text(rp.plate, "", 28, new Color(0.6f, 0.9f, 1f), TextAnchor.MiddleCenter);
+            rp.plate = UIB.Rect("Name", nameCanvas, Vector2.zero, Vector2.zero, new Vector2(520, 70), new Vector2(0.5f, 0));
+            rp.plateText = UIB.Text(UIB.Rect("Text", rp.plate, new Vector2(0.5f, 1), Vector2.zero, new Vector2(520, 44)), "", 26,
+                new Color(0.6f, 0.9f, 1f), TextAnchor.MiddleCenter);
+            rp.hpFill = UIB.Bar(rp.plate, new Vector2(0.5f, 0), new Vector2(0, 6), new Vector2(140, 12), new Color(0.85f, 0.15f, 0.15f));
             return rp;
         }
 
@@ -212,11 +311,14 @@ namespace MuProto
             targetRot = st.ry;
             if ((targetPos - transform.position).sqrMagnitude > 100f) transform.position = targetPos; // teleported (dungeon, respawn)
 
+            var cls = Classes.Get(st.c);
             if (rebuildBody)
             {
                 if (body != null) Destroy(body.gameObject);
-                body = Player.MakeBody(transform, Classes.Get(st.c), out anim);
+                body = Player.MakeBody(transform, cls, out anim);
+                aura = Aura.Attach(body, cls.BodyColor);
             }
+            aura.SetLevel(st.g);
             if (rebuildWings)
             {
                 if (wings != null) Destroy(wings.gameObject);
@@ -224,7 +326,10 @@ namespace MuProto
             }
             if (st.pt > 0 && pet == null) pet = RemotePet.Create(transform);
             else if (st.pt <= 0 && pet != null) { Destroy(pet.gameObject); pet = null; }
-            plateText.text = "Lv " + st.lv + " " + Classes.Get(st.c).Name + "  " + st.n;
+
+            plateText.text = (st.k == 1 ? "[PK] " : "") + (st.rb > 0 ? st.rb + "R " : "") + "Lv " + st.lv + " " + cls.Name + "  " + st.n + "\nCP " + st.cp;
+            plateText.color = st.r == 1 ? new Color(1f, 0.3f, 0.25f) : st.k == 1 ? new Color(1f, 0.65f, 0.25f) : new Color(0.6f, 0.9f, 1f);
+            UIB.SetBar(hpFill, st.h / 100f);
             if (st.a == 1 && anim != null) anim.Play(ModelAnimator.Anim.Attack, false, 0.5f);
         }
 

@@ -3,19 +3,25 @@ using UnityEngine;
 
 namespace MuProto
 {
-    // A glowing ball that flies to a monster and deals its damage on arrival.
+    // A glowing ball that flies to its target and does something on arrival (usually deals damage).
     public class Projectile : MonoBehaviour
     {
         const float Speed = 28f;
 
-        Monster target;
-        Combatant source;
-        int damage;
-        bool crit;
-        Color color;
-        float ringRadius;
+        Transform target;
+        System.Func<bool> stillValid;
+        System.Action onHit;
 
         public static void Fire(Vector3 from, Monster target, int damage, bool crit, Combatant source, Color color, float ringRadius)
+        {
+            Fire(from, target.transform, color, () => target != null && !target.IsDead, () =>
+            {
+                target.TakeDamage(damage, crit, source);
+                if (ringRadius > 0) Effect.Ring(target.transform.position, ringRadius, color);
+            });
+        }
+
+        public static void Fire(Vector3 from, Transform target, Color color, System.Func<bool> stillValid, System.Action onHit)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             Destroy(go.GetComponent<Collider>());
@@ -25,23 +31,19 @@ namespace MuProto
             Paint.Color(go, color);
             var p = go.AddComponent<Projectile>();
             p.target = target;
-            p.source = source;
-            p.damage = damage;
-            p.crit = crit;
-            p.color = color;
-            p.ringRadius = ringRadius;
+            p.stillValid = stillValid;
+            p.onHit = onHit;
         }
 
         void Update()
         {
-            if (target == null || target.IsDead) { Destroy(gameObject); return; }
-            Vector3 aim = target.transform.position + Vector3.up;
+            if (target == null || (stillValid != null && !stillValid())) { Destroy(gameObject); return; }
+            Vector3 aim = target.position + Vector3.up;
             Vector3 d = aim - transform.position;
             float step = Speed * Time.deltaTime;
             if (d.magnitude <= step)
             {
-                target.TakeDamage(damage, crit, source);
-                if (ringRadius > 0) Effect.Ring(target.transform.position, ringRadius, color);
+                onHit?.Invoke();
                 Destroy(gameObject);
                 return;
             }
@@ -173,138 +175,6 @@ namespace MuProto
             }
             int dmg = Combatant.RollDamage(Damage, 1f, out bool crit);
             Projectile.Fire(transform.position + Vector3.up * 0.8f, t, dmg, crit, owner, new Color(1f, 0.6f, 0.8f), 0f);
-        }
-    }
-
-    // Daily dungeon: an arena away from the field with two waves and a boss, against the clock.
-    public class Dungeon : MonoBehaviour
-    {
-        public static Dungeon Active { get; private set; }
-
-        public const int Waves = 3;
-        const float TimeLimit = 120f;
-        static readonly Vector3 Center = new Vector3(300f, 0, 0);
-        static readonly Rect ArenaBounds = new Rect(286f, -14f, 28f, 28f);
-        static GameObject arena;
-
-        MonsterSpawner minions, boss;
-        int alive;
-        bool finished;
-
-        public int Wave { get; private set; }
-        public float TimeLeft { get; private set; }
-
-        public static bool Enter()
-        {
-            var p = Player.Instance;
-            if (Active != null || p == null || p.IsDead || !p.HasClass) return false;
-            if (!p.UseDungeonRun()) return false;
-            BuildArena();
-            Active = new GameObject("Dungeon Run").AddComponent<Dungeon>();
-            Active.Begin(p);
-            return true;
-        }
-
-        static void BuildArena()
-        {
-            if (arena != null) return;
-            arena = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            arena.name = "Dungeon Arena";
-            arena.transform.position = Center;
-            arena.transform.localScale = new Vector3(3.2f, 1, 3.2f);
-            Paint.Color(arena, new Color(0.28f, 0.24f, 0.3f));
-            for (int x = -1; x <= 1; x += 2)
-                for (int z = -1; z <= 1; z += 2)
-                {
-                    var pillar = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    Destroy(pillar.GetComponent<Collider>());
-                    pillar.transform.SetParent(arena.transform, true);
-                    pillar.transform.position = Center + new Vector3(x * 15f, 2f, z * 15f);
-                    pillar.transform.localScale = new Vector3(1.5f, 4f, 1.5f) / 3.2f;
-                    Paint.Color(pillar, new Color(0.45f, 0.4f, 0.5f));
-                }
-        }
-
-        void Begin(Player p)
-        {
-            int lv = p.Data.level;
-            string name = lv < 5 ? "Slime" : lv < 10 ? "Goblin" : lv < 20 ? "Orc" : "Golem";
-            minions = MonsterSpawner.Create(name, lv, Center + new Vector3(0, 0, 5f), 8f, 0, new Color(0.6f, 0.3f, 0.7f), 1.1f, false);
-            boss = MonsterSpawner.Create("Golem", lv + 3, Center + new Vector3(0, 0, 7f), 0.5f, 0, new Color(0.35f, 0.3f, 0.4f), 2.6f, false);
-            foreach (var s in new[] { minions, boss })
-            {
-                s.Bounds = ArenaBounds;
-                s.Died += OnMonsterDied;
-            }
-            p.Teleport(Center + new Vector3(0, 0, -10f), ArenaBounds);
-            TimeLeft = TimeLimit;
-            NextWave();
-        }
-
-        void NextWave()
-        {
-            Wave++;
-            if (Wave < Waves)
-            {
-                int n = Wave == 1 ? 6 : 8;
-                for (int i = 0; i < n; i++) minions.Spawn();
-                alive += n;
-                HUD.Message("Wave " + Wave + " / " + Waves, 2f);
-            }
-            else
-            {
-                boss.Spawn().MakeBoss();
-                for (int i = 0; i < 3; i++) minions.Spawn();
-                alive += 4;
-                HUD.Message("BOSS!", 2f);
-            }
-        }
-
-        void OnMonsterDied(Monster m)
-        {
-            alive--;
-            if (alive > 0 || finished) return;
-            if (Wave < Waves) NextWave();
-            else Finish(true);
-        }
-
-        void Update()
-        {
-            if (finished) return;
-            TimeLeft -= Time.deltaTime;
-            var p = Player.Instance;
-            if (p == null || p.IsDead || TimeLeft <= 0) Finish(false);
-        }
-
-        public void Leave()
-        {
-            if (!finished) Finish(false);
-        }
-
-        void Finish(bool won)
-        {
-            finished = true;
-            var p = Player.Instance;
-            if (won)
-            {
-                int lv = p.Data.level;
-                int gold = 200 + lv * 40;
-                p.AddMaterials(gold, 5, 5);
-                var rarity = Random.value < 0.3f ? Rarity.Epic : Rarity.Rare;
-                p.GiveItem(GameData.MakeItem((Slot)Random.Range(0, 4), rarity, lv), p.transform.position + Vector3.up * 3f);
-                p.Commit();
-                HUD.Message("Dungeon cleared!  +" + gold + "g  +5 Feathers  +5 Pet Food", 4f);
-            }
-            else
-                HUD.Message(TimeLeft <= 0 ? "Time's up! Dungeon failed" : "Dungeon failed", 3f);
-
-            foreach (var m in new List<Monster>(Monster.All))
-                if (m.Bounds == ArenaBounds) Destroy(m.gameObject);
-            Destroy(minions.gameObject);
-            Destroy(boss.gameObject);
-            if (p != null && !p.IsDead) p.Teleport(Vector3.zero, Combatant.FieldBounds);
-            Active = null;
-            Destroy(gameObject);
         }
     }
 }

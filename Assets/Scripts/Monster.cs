@@ -12,11 +12,21 @@ namespace MuProto
         const float AttackRange = 1.8f;
         const float AttackInterval = 1.2f;
 
+        // Every hit any monster takes (Devil Square scoring, world boss sharing).
+        public static event System.Action<Monster, int, Combatant> AnyHpLost;
+        public event System.Action<int, Combatant> HpLost;
+
         public int Level { get; private set; }
         public bool IsBoss { get; private set; }
+        public bool IsWorldBoss { get; private set; }
+        public bool Stationary { get; private set; }   // gates, statues: never move or attack
+        public bool NoRewards;                          // rewards handled by the dungeon / boss instead
+        public string DisplayName { get; private set; }
+        public MonsterSpawner Spawner => spawner;
         int RewardMul => IsBoss ? 10 : 1;
-        public int ExpReward => (8 + Level * 6) * RewardMul;
+        public int ExpReward => GameData.MonsterExp(Level) * RewardMul;
         public int GoldReward => Random.Range(5 + Level * 2, 8 + Level * 4) * RewardMul;
+        float slamTimer = 6f;
 
         int maxHp, atk, def;
         public override int MaxHp => maxHp;
@@ -36,7 +46,10 @@ namespace MuProto
             root.transform.position = position;
 
             float s = spawner.Scale;
-            var model = ModelLibrary.Spawn(spawner.MonsterName, root.transform, s * 1.4f, out var animator);
+            var model = ModelLibrary.Spawn(spawner.ModelName, root.transform, s * 1.4f, out var animator);
+            if (model != null && spawner.Tint != Color.white)
+                foreach (var r in model.GetComponentsInChildren<Renderer>())
+                    foreach (var mat in r.materials) mat.color *= spawner.Tint;
             if (model == null)
             {
                 var body = GameObject.CreatePrimitive(spawner.Level >= 20 ? PrimitiveType.Cube : PrimitiveType.Sphere);
@@ -51,9 +64,10 @@ namespace MuProto
             m.anim = animator;
             m.spawner = spawner;
             m.Level = spawner.Level;
-            m.maxHp = 40 + m.Level * 30;
-            m.atk = 6 + m.Level * 4;
-            m.def = m.Level * 2;
+            m.DisplayName = spawner.MonsterName;
+            m.maxHp = GameData.MonsterHp(m.Level);
+            m.atk = GameData.MonsterAtk(m.Level);
+            m.def = GameData.MonsterDef(m.Level);
             m.Hp = m.maxHp;
             m.home = position;
             m.wanderTarget = position;
@@ -61,14 +75,55 @@ namespace MuProto
             return m;
         }
 
+        // Something to break rather than fight: a castle gate or statue with its own look.
+        public static Monster CreateStructure(MonsterSpawner spawner, Vector3 position, string name, int hp, System.Func<Transform, float> buildVisual)
+        {
+            var root = new GameObject(name);
+            root.transform.position = position;
+            float height = buildVisual(root.transform);
+            var m = root.AddComponent<Monster>();
+            m.spawner = spawner;
+            m.Level = spawner.Level;
+            m.DisplayName = name;
+            m.Stationary = true;
+            m.NoRewards = true;
+            m.maxHp = m.Hp = hp;
+            m.def = GameData.MonsterDef(m.Level);
+            m.home = position;
+            m.BuildHpBar(height + 0.5f);
+            spawner.Track();
+            return m;
+        }
+
         // Dungeon boss: much tougher, hits harder, and pays out ten times the rewards.
-        public void MakeBoss()
+        public void MakeBoss(float hpMul = 12f)
         {
             IsBoss = true;
-            maxHp *= 12;
+            maxHp = Mathf.RoundToInt(maxHp * hpMul);
             atk = Mathf.RoundToInt(atk * 1.5f);
             Hp = maxHp;
+            hpBar.localScale = Vector3.one * 2f;
         }
+
+        // Shared open-world boss: HP is the same for everyone, rewards are paid by WorldBoss.
+        public void MakeWorldBoss(float hpMul)
+        {
+            MakeBoss(hpMul);
+            IsWorldBoss = true;
+            NoRewards = true;
+            hpBar.localScale = Vector3.one * 3f;
+        }
+
+        // Damage dealt by other players to a shared boss: no DEF, no killer.
+        public void ApplyExternalDamage(int amount)
+        {
+            if (IsDead || amount <= 0) return;
+            Hp = Mathf.Max(0, Hp - amount);
+            FloatingText.Spawn(transform.position + Vector3.up * 3f, amount.ToString(), new Color(0.75f, 0.75f, 0.85f), 26);
+            if (Hp == 0) Die(null);
+        }
+
+        public float HpRatio => (float)Hp / maxHp;
 
         void BuildHpBar(float height)
         {
@@ -95,13 +150,15 @@ namespace MuProto
 
         void Update()
         {
-            if (IsDead) return;
+            if (IsDead || Stationary) return;
             float dt = Time.deltaTime;
             attackTimer -= dt;
 
             var player = Player.Instance;
-            if (aggro == null && !returningHome && player != null && !player.IsDead && FlatDistance(player) < AggroRadius)
+            bool playerSafe = player == null || player.IsDead || player.InTown;
+            if (aggro == null && !returningHome && !playerSafe && FlatDistance(player) < AggroRadius * (IsWorldBoss ? 2f : 1f))
                 aggro = player;
+            if (aggro == player && playerSafe && player != null) { aggro = null; returningHome = true; }
 
             Vector3 fromHome = transform.position - home;
             fromHome.y = 0;
@@ -113,9 +170,18 @@ namespace MuProto
                 returningHome = true;
             }
 
+            if (aggro != null && IsWorldBoss && (slamTimer -= dt) <= 0)
+            {
+                // Ground slam: hits everyone close by, so groups have to spread out.
+                slamTimer = 7f;
+                Effect.Ring(transform.position, 5.5f, new Color(0.9f, 0.3f, 0.9f));
+                PlayAction(ModelAnimator.Anim.Attack, 0.9f);
+                if (FlatDistance(aggro) < 5.5f) aggro.TakeDamage(RollDamage(atk, 1.8f, out bool c), c, this);
+            }
+
             if (aggro != null)
             {
-                if (FlatDistance(aggro) > AttackRange)
+                if (FlatDistance(aggro) > AttackRange + (IsWorldBoss || IsBoss ? 1.5f : 0f))
                     Step(aggro.transform.position - transform.position, 3.5f);
                 else if (attackTimer <= 0)
                 {
@@ -127,7 +193,7 @@ namespace MuProto
             else if (returningHome)
             {
                 Step(home - transform.position, 6f);
-                Hp = maxHp;
+                if (!IsWorldBoss) Hp = maxHp; // a shared boss keeps the damage everyone dealt
                 if (fromHome.magnitude < 0.5f) returningHome = false;
             }
             else
@@ -146,7 +212,7 @@ namespace MuProto
             KeepApart(dt);
         }
 
-        float BodyRadius => spawner.Scale * 0.5f;
+        float BodyRadius => Stationary ? 1f : spawner.Scale * 0.5f;
 
         // Nudge away from other monsters and the player so they surround instead of stacking.
         void KeepApart(float dt)
@@ -154,7 +220,7 @@ namespace MuProto
             Vector3 push = Vector3.zero;
             foreach (var o in All)
             {
-                if (o == this || o.IsDead) continue;
+                if (o == this || o.IsDead || o.Stationary) continue;
                 push += Separation(o.transform.position, BodyRadius + o.BodyRadius);
             }
             var player = Player.Instance;
@@ -187,16 +253,23 @@ namespace MuProto
 
         protected override Color DamageColor(bool crit) => crit ? new Color(1f, 0.9f, 0.2f) : Color.white;
 
+        protected override void OnHpLost(int amount, Combatant source)
+        {
+            HpLost?.Invoke(amount, source);
+            AnyHpLost?.Invoke(this, amount, source);
+        }
+
         protected override void OnDamaged(Combatant source)
         {
-            aggro = source;
+            if (Stationary) return;
+            if (source != null) aggro = source;
             returningHome = false;
             if (!IsDead) PlayAction(ModelAnimator.Anim.Hit, 0.3f);
         }
 
         protected override void Die(Combatant killer)
         {
-            if (Player.Instance != null) Player.Instance.OnKill(this);
+            if (Player.Instance != null && !NoRewards) Player.Instance.OnKill(this);
             spawner.NotifyDeath(this);
             hpBar.gameObject.SetActive(false);
             // Leave the body briefly so a death animation can play.
