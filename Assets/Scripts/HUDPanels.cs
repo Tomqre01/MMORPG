@@ -77,7 +77,7 @@ namespace MuProto
         {
             mapPanel = new MenuPanel(root, "Teleport", new Vector2(1240, 900), 130, 3, () =>
                 "You are in " + Maps.CurrentDef.Name + ".\nEach map has a safe town in the middle. Teleporting costs Zen.\n" +
-                "Monsters and levels come from the MU Origin server data. Atlans and later maps need Rebirths.");
+                "Aurelion is the capital. Atlans and later maps need Rebirths.");
             for (int i = 0; i < Maps.All.Length; i++)
             {
                 int id = i;

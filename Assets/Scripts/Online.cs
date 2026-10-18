@@ -149,9 +149,9 @@ namespace MuProto
             UIB.Image(UIB.Rect("Glow", panel, center, new Vector2(0, 200), new Vector2(2400, 1300), center), new Color(0.7f, 0.35f, 0.12f, 0.35f), Skin.Soft).raycastTarget = false;
             var plate = UIB.Rect("Title", panel, center, new Vector2(0, 330), new Vector2(1100, 170), center);
             UIB.Image(plate, Color.white, Skin.Banner).raycastTarget = false;
-            var title = Skin.Title(plate, "MU PROTO", 96, center, Vector2.zero, new Vector2(1100, 150));
+            var title = Skin.Title(plate, "KING OF ORIGIN", 96, center, Vector2.zero, new Vector2(1100, 150));
             title.rectTransform.pivot = center;
-            var sub = UIB.Label(panel, "an MU Origin style prototype", 30, center, new Vector2(0, 228), new Vector2(1000, 50), TextAnchor.MiddleCenter);
+            var sub = UIB.Label(panel, "Aurelion awaits", 30, center, new Vector2(0, 228), new Vector2(1000, 50), TextAnchor.MiddleCenter);
             sub.rectTransform.pivot = center;
             sub.color = Skin.Muted;
             Skin.Frame(panel, "Box", center, new Vector2(0, 35), new Vector2(1060, 330), center).GetComponent<Image>().raycastTarget = false;
