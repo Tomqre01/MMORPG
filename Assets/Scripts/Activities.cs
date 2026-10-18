@@ -187,7 +187,7 @@ namespace MuProto
         void StartInvasion()
         {
             var map = Maps.CurrentDef;
-            foreach (var z in Maps.ZonesOf(map.Id).Take(3))
+            foreach (var z in Maps.ZonesOf(map.Id).Where(z => !z.Elite).Take(3))
             {
                 var s = MonsterSpawner.Create("Golden " + z.MonsterName, z.Level + 5, z.Center, z.Radius, 0, new Color(1f, 0.8f, 0.2f),
                     z.Scale * 1.2f, false, z.ModelName, new Color(1.6f, 1.3f, 0.35f));
@@ -314,7 +314,7 @@ namespace MuProto
 
         void Begin(Player p)
         {
-            level = Mathf.Max(1, p.Data.level);
+            level = Mathf.Max(1, GameData.Power(p.Data));
             var lava = Block(transform, PrimitiveType.Plane, Center + Vector3.down * 0.3f, new Vector3(5f, 1, 5f), new Color(0.4f, 0.08f, 0.02f));
             props.Add(lava);
             floor = Block(transform, PrimitiveType.Cube, Center + Vector3.down * 0.05f, new Vector3(half * 2, 0.1f, half * 2), new Color(0.35f, 0.32f, 0.38f)).transform;

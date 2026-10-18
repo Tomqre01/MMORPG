@@ -267,11 +267,21 @@ namespace MuProto
         public static int RebirthGold(int rebirth) => 20000 * (rebirth + 1);
         public static int ExpToNext(int level, int rebirth) => Mathf.RoundToInt((20 + level * level * 8) * (1f + 0.25f * rebirth));
 
-        // Monster numbers by level (field, dungeons and bosses all use these).
-        public static int MonsterHp(int lv) => Mathf.RoundToInt(40 + lv * 30 + lv * lv * 0.8f);
-        public static int MonsterAtk(int lv) => Mathf.RoundToInt(6 + lv * 4 + lv * lv * 0.02f);
+        // "Power" puts rebirth and level on one scale, like the MU Origin server data (ZhuanSheng + Level):
+        // Lv 1..100 is 1..100, 1 Rebirth Lv 50 is 150, 3 Rebirth Lv 100 is 400. Monsters, maps and auto-hunt use it.
+        public static int Power(PlayerSave d) => d.rebirth * 100 + d.level;
+        public static int PowerRebirth(int power) => Mathf.Max(0, (power - 1) / 100);
+        public static int PowerLevel(int power) => power <= 0 ? 0 : (power - 1) % 100 + 1;
+        public static string LevelLabel(int power) => power > 100 ? PowerRebirth(power) + "R Lv" + PowerLevel(power) : "Lv " + power;
+
+        // Monster numbers by power (field, dungeons and bosses all use these). Past Lv 100 they grow
+        // more gently, since rebirth characters keep their stats.
+        public static int MonsterHp(int lv) => lv <= 100 ? Mathf.RoundToInt(40 + lv * 30 + lv * lv * 0.8f) : Mathf.RoundToInt(MonsterHp(100) * Mathf.Pow(lv / 100f, 1.3f));
+        public static int MonsterAtk(int lv) => lv <= 100 ? Mathf.RoundToInt(6 + lv * 4 + lv * lv * 0.02f) : Mathf.RoundToInt(MonsterAtk(100) * Mathf.Pow(lv / 100f, 1.15f));
         public static int MonsterDef(int lv) => lv * 2;
-        public static int MonsterExp(int lv) => Mathf.RoundToInt(10 + lv * 6 + lv * lv * 0.6f);
+        // EXP follows the level inside the rebirth, like ExpToNext does.
+        public static int MonsterExp(int lv) => lv <= 100 ? Mathf.RoundToInt(10 + lv * 6 + lv * lv * 0.6f)
+            : Mathf.RoundToInt(MonsterExp(PowerLevel(lv)) * (1f + 0.25f * PowerRebirth(lv)));
 
         public static string RarityName(Rarity r) => r == Rarity.Epic ? "Ancient" : r == Rarity.Rare ? "Excellent" : "Normal";
 
@@ -377,7 +387,7 @@ namespace MuProto
             float r = Random.value;
             var rarity = r < 0.04f * epicBoost ? Rarity.Epic : r < 0.25f ? Rarity.Rare : Rarity.Common;
             string cls = Random.value < 0.85f ? d.classId : Classes.All[Random.Range(0, Classes.All.Length)].Id;
-            return MakeItem(slot, rarity, monsterLevel, 1 + Mathf.Min(d.rebirth, MaxTier - 1), cls);
+            return MakeItem(slot, rarity, PowerLevel(monsterLevel), 1 + Mathf.Min(d.rebirth, MaxTier - 1), cls);
         }
 
         public static PlayerSave NewSave()

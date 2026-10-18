@@ -75,16 +75,16 @@ namespace MuProto
 
         void BuildMap(Transform root)
         {
-            mapPanel = new MenuPanel(root, "Teleport", new Vector2(1100, 760), 200, 3, () =>
+            mapPanel = new MenuPanel(root, "Teleport", new Vector2(1240, 900), 130, 3, () =>
                 "You are in " + Maps.CurrentDef.Name + ".\nEach map has a safe town in the middle. Teleporting costs Zen.\n" +
-                "Monsters get stronger from Lorencia to Tarkan. Icarus opens after the first Rebirth.");
+                "Monsters and levels come from the MU Origin server data. Atlans and later maps need Rebirths.");
             for (int i = 0; i < Maps.All.Length; i++)
             {
                 int id = i;
                 mapPanel.AddButton(() =>
                 {
                     var m = Maps.All[id];
-                    string req = m.MinRebirth > 0 ? m.MinRebirth + " Rebirth" : "Lv " + m.MinLevel;
+                    string req = m.Requirement;
                     return m.Name + (Maps.Current == id ? " (here)" : "") + "\n<size=20>" + req + " · " + (m.Cost > 0 ? m.Cost + " Zen" : "free") + "</size>";
                 }, () =>
                 {

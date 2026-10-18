@@ -81,7 +81,7 @@ namespace MuProto
             mapContent.anchoredPosition = -new Vector2(me.x - def.Center.x, me.z - def.Center.z) * MapScale;
             mapGround.anchoredPosition = Vector2.zero;
             playerArrow.localEulerAngles = new Vector3(0, 0, -p.transform.eulerAngles.y);
-            int lv = p.Data.level;
+            int lv = GameData.Power(p.Data);
             foreach (var (img, zl) in zoneMarks)
             {
                 int gap = zl - lv;

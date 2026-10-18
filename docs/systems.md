@@ -130,3 +130,20 @@ textures at start-up and 9-sliced, so there are still no art files to manage.
 
 The canvas keeps a 1080 px height and widens on long phones. In the editor, **Tools > UI Shots** (in Play mode)
 saves screenshots of the HUD and the main windows to `Assets/UIShots` (ignored by git).
+
+## Maps and monsters from the MU Origin server data
+
+`Assets/Scripts/MapData.cs` is generated from the MU Origin server files (`D:\MU_Server7\Config`) by
+`Tools/ServerImport/gen_maps.py` (run it on the PC that has the server folder, from `MU_Server7\Config`).
+
+- **10 field maps**, matching server map codes 1–10: Lorencia, Noria, Devias, Dungeon, Lost Tower, Atlans, Tarkan, Icarus, Aida, Kanturu Ruins.
+- **Monsters per map:** each normal monster type (MonsterType 101) becomes a zone with its Thai name (`SName`) and level.
+  The zone sits where that type spawns on the server, measured from the town (`MapConfig.xml` birth point) and scaled to the 96 m map.
+- **Elites** (`ชั้นยอด·`, MonsterType 301) are single boss-strength monsters that respawn after a minute and pay boss rewards.
+- **Left out:** golden monsters, event monsters and the Lv 200 field bosses (Golden Invasion and the World Boss cover those).
+- **Power** (`GameData.Power`) puts rebirth and level on one scale like the server's ZhuanSheng + Level:
+  - Lv 90 is 90, and 3 Rebirth Lv 92 is 392.
+  - Maps unlock by power (Atlans 2R Lv85, Tarkan 3R Lv88, Aida 5R Lv88, Kanturu 6R Lv88).
+  - Auto-hunt, quests, dungeons and the minimap use power too.
+  - Monster HP and attack grow more gently past power 100, and EXP per kill follows the level inside the rebirth.
+- Monsters reuse the five models the project has (Slime, Turtle, Goblin, Orc, Golem). The model is picked from keywords in the Thai name and tinted per map.
