@@ -29,6 +29,7 @@ namespace MuProto
         Vector3 spawnPoint;
         Transform body, wings;
         Aura aura;
+        GearVisual gear;
         float attackTimer, respawnTimer, lastHitTime, regenAcc, saveTimer, potionCd;
         float buffUntil, buffAtk, buffDef;
         string lastAttackerSession, lastAttackerName;
@@ -270,6 +271,8 @@ namespace MuProto
             body = MakeBody(transform, Class, out anim);
             aura = Aura.Attach(body, Class.BodyColor);
             aura.SetLevel(HasClass ? GlowPlus : 0);
+            gear = body.GetComponentInChildren<GearVisual>();
+            if (gear != null) gear.Apply(GearVisual.TiersOf(Data));
             BuildWings();
             BuildMount();
         }
@@ -1158,9 +1161,24 @@ namespace MuProto
             return true;
         }
 
-        void RefreshLook()
+        public void RefreshLook()
         {
+            if (gear != null) gear.Apply(GearVisual.TiersOf(Data));
             if (aura != null) aura.SetLevel(GlowPlus);
+        }
+
+        // Takes the item in an equipment slot (Data.equipped index) off and puts it in the bag.
+        public string Unequip(int index)
+        {
+            var it = Data.equipped[index];
+            if (it.IsEmpty) return "Nothing there";
+            if (Data.bag.Count >= GameData.BagSize) return "Bag is full";
+            Data.bag.Add(it);
+            Data.equipped[index] = new Item();
+            Hp = Mathf.Min(Hp, MaxHp);
+            RefreshLook();
+            Commit();
+            return "Took off " + it.Label;
         }
 
         // ---- Potions ----

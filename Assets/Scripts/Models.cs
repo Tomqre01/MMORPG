@@ -54,6 +54,7 @@ namespace MuProto
             foreach (var c in model.GetComponentsInChildren<Collider>()) Object.Destroy(c);
             foreach (var rb in model.GetComponentsInChildren<Rigidbody>()) Object.Destroy(rb);
             FixMaterials(model, name);
+            GearVisual.Attach(model, name); // hero models: hide the gear pieces until something is equipped
 
             if (TryBounds(model, out Bounds b) && b.size.y > 0.01f)
             {
@@ -70,9 +71,11 @@ namespace MuProto
         {
             bounds = default;
             bool any = false;
+            bool hero = GearVisual.HasGear(go); // size heroes by the bare body, whatever they hold or wear
             foreach (var r in go.GetComponentsInChildren<Renderer>())
             {
                 if (r is ParticleSystemRenderer) continue;
+                if (hero && r.name != "G_Body") continue;
                 if (!any) { bounds = r.bounds; any = true; }
                 else bounds.Encapsulate(r.bounds);
             }

@@ -43,6 +43,52 @@ namespace MuProto.EditorTools
 
         class Runner : MonoBehaviour { }
 
+        // Tools > Gear Shots: puts on a full set of every tier in turn and photographs the Backpack,
+        // then gives the player back what they had on.
+        [MenuItem("Tools/Gear Shots (Play mode)")]
+        static void RunGear()
+        {
+            if (!Application.isPlaying || HUD.Instance == null || Player.Instance == null)
+            {
+                Debug.LogWarning("[UIShots] Enter Play mode (and log in) first.");
+                return;
+            }
+            HUD.Instance.StartCoroutine(Gear());
+        }
+
+        static IEnumerator Gear()
+        {
+            string dir = Path.Combine(Application.dataPath, "UIShots");
+            Directory.CreateDirectory(dir);
+            var p = Player.Instance;
+            p.AutoBattle = false;
+            var before = new System.Collections.Generic.List<Item>(p.Data.equipped);
+            for (int tier = 1; tier <= GameData.MaxTier; tier++)
+            {
+                foreach (var slot in GearVisual.Shown)
+                {
+                    var it = GameData.MakeItem(slot, tier >= 5 ? Rarity.Epic : tier >= 3 ? Rarity.Rare : Rarity.Common, 10 * tier, tier, p.Data.classId);
+                    it.plus = tier >= 4 ? 9 : 0;
+                    p.Data.equipped[(int)slot] = it;
+                }
+                p.RefreshLook();
+                p.Commit();
+                HUD.Instance.CloseAll();
+                HUD.Instance.Open("Bag");
+                yield return new WaitForSecondsRealtime(0.8f);
+                ScreenCapture.CaptureScreenshot(Path.Combine(dir, "Gear_T" + tier + ".png"));
+                yield return new WaitForSecondsRealtime(0.4f);
+                HUD.Instance.CloseAll();
+                yield return new WaitForSecondsRealtime(0.4f);
+                ScreenCapture.CaptureScreenshot(Path.Combine(dir, "GearWorld_T" + tier + ".png"));
+                yield return new WaitForSecondsRealtime(0.4f);
+            }
+            for (int i = 0; i < before.Count; i++) p.Data.equipped[i] = before[i];
+            p.RefreshLook();
+            p.Commit();
+            Debug.Log("[UIShots] Gear shots saved to " + dir);
+        }
+
         static IEnumerator Rest(string dir)
         {
             float t = 0;
