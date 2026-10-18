@@ -65,6 +65,23 @@ namespace MuProto.EditorTools
             yield return null;
             ScreenCapture.CaptureScreenshot(Path.Combine(dir, "Fight.png"));
             yield return new WaitForSecondsRealtime(0.5f);
+            // A close look at every model on Lorencia: stand next to each zone and take a picture.
+            var p = Player.Instance;
+            p.AutoBattle = false;
+            int before = Maps.Current;
+            Maps.Enter(p, 0, true);
+            yield return new WaitForSecondsRealtime(1f);
+            var seen = new System.Collections.Generic.HashSet<string>();
+            foreach (var z in Maps.ZonesOf(0))
+            {
+                if (!seen.Add(z.ModelName)) continue;
+                p.Teleport(z.Center + new Vector3(0, 0, -z.Radius - 3f), Maps.All[0].Bounds);
+                yield return new WaitForSecondsRealtime(2f);
+                HUD.Instance.CloseAll();
+                ScreenCapture.CaptureScreenshot(Path.Combine(dir, "Zone_" + z.ModelName + ".png"));
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+            Maps.Enter(p, before, true);
             Debug.Log("[UIShots] Saved to " + dir);
         }
     }
