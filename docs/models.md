@@ -112,3 +112,31 @@ GetHit, Dizzy, Die, Taunt, Victory, SenseSomethingStart, SenseSomethingRT
 วิธีรันใหม่: เปิด Blender > Text Editor > Open `Assets/Tools/build_heroes.py` > Run Script (Alt+P)
 แก้สี วัสดุ ทรง หรือท่าได้ในสคริปต์ (`CLASSES` คือสีของแต่ละคลาส, `actions_for` คือท่า)
 
+
+## Monsters (Tools/Blender/build_monsters.py)
+
+![Monsters](images/Monsters_Preview.png)
+
+Seven original monster models, used by every map's zones according to keywords in the monster's Thai name (see `Tools/ServerImport/gen_maps.py`):
+
+| Model | Used for (examples) |
+|---|---|
+| Spider | แมงมุม, แมงมุมนรก |
+| BabyDragon | มังกรเด็ก, มังกรปีศาจ, บาฮามุท |
+| Hound | ปีศาจสุนัข, หมาป่า, เขี้ยว… |
+| BullDemon | ปีศาจวัว, ปีศาจวัวโหด (tinted red), ราชาปีศาจวัว |
+| DarkMage | พ่อมดมืด, แม่มดป่า, พ่อมดสาปแช่ง |
+| Giant | ยักษ์, ยักษ์ตาเดียว, มนุษย์หิมะ |
+| Skeleton | ทหารกระดูก, นักธนูกระดูก, นักรบกระดูก |
+
+How they are built:
+- **Bodies:** metaballs, one blob per joint and a capsule along each bone, melted together. The blob is converted to a mesh and decimated to about 6,000 faces.
+- **Thin parts:** legs and tails are tapered tubes.
+- **Rigid pieces:** horns, eyes, teeth, wings, weapons and armour are fixed to one bone each.
+- **Skinning:** each vertex is weighted to its two nearest bones, so limbs bend smoothly.
+- **Clips:** Idle, Run, Attack01, GetHit, Die at 30 fps.
+
+To rebuild:
+1. Run `Tools/Blender/blender_watch.py` once in Blender. It runs whatever is saved as `Assets/Tools/BlenderJobs/job.py`.
+2. Use a job that runs `build_monsters.py`, or run that script directly in Blender's Text Editor.
+3. The FBX files go to `Resources/Models/<Name>/<Name>_Rigged.fbx` and previews to `Assets/Tools/Previews`.

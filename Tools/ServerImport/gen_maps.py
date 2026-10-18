@@ -1,12 +1,24 @@
 import xml.etree.ElementTree as ET, collections, math
 mons={m.get('ID'):m for m in ET.parse('GameRes/Config/Monsters.xml').getroot().iter('Monster')}
 births={m.get('Code'):(int(m.get('BirthPosX')),int(m.get('BirthPosY'))) for m in ET.parse('GameRes/Config/MapConfig.xml').getroot().iter('Map')}
-MODELS=[('Slime',['แมงมุม','หนอน','วิญญาณ','ภูต','นางไม้']),
-        ('Turtle',['เต่า','มังกร','แมงป่อง','บาฮามุท','เมอร์เมด','ปีศาจทะเล']),
-        ('Golem',['ยักษ์','มนุษย์หิมะ','หิน','เหล็ก','อ็อค','ร่างเทียม','อากามอสส์','เกราะ']),
-        ('Goblin',['ก็อบลิน','หัวขโมย','ลอบสังหาร','คนป่า','พ่อมด','แม่มด','ธนู','สุนัข','หมาป่า','ยาร์ค','ฟาเฮล','ศิษย์']),
+# Model picked from keywords in the Thai name, first match wins. Spider .. Skeleton are our own
+# Blender monsters (Tools/Blender/build_monsters.py); Slime .. Orc are the older placeholder models.
+MODELS=[('Spider',['แมงมุม']),
+        ('Skeleton',['กระดูก']),
+        ('BabyDragon',['มังกร','บาฮามุท']),
+        ('Hound',['สุนัข','หมาป่า','เขี้ยว']),
+        ('BullDemon',['วัว']),
+        ('DarkMage',['พ่อมด','แม่มด','วิญญาณดับ','นักวิชาการ','ศิษย์']),
+        ('Giant',['ยักษ์','มนุษย์หิมะ','ร่างเทียม','อ็อค']),
+        ('Slime',['หนอน','วิญญาณ','ภูต','นางไม้']),
+        ('Turtle',['เต่า','แมงป่อง','เมอร์เมด','ปีศาจทะเล']),
+        ('Golem',['หิน','เหล็ก','อากามอสส์','เกราะ']),
+        ('Goblin',['ก็อบลิน','หัวขโมย','ลอบสังหาร','คนป่า','ธนู','ยาร์ค','ฟาเฮล']),
         ('Orc',[''])]
-BASE={'Slime':0.9,'Turtle':0.9,'Golem':1.8,'Goblin':1.0,'Orc':1.3}
+BASE={'Slime':0.9,'Turtle':0.9,'Golem':1.8,'Goblin':1.0,'Orc':1.3,
+      'Spider':0.75,'Skeleton':1.35,'BabyDragon':0.9,'Hound':0.9,'BullDemon':1.55,'DarkMage':1.35,'Giant':2.0}
+# Name words that recolour a monster: fierce / poison / hell / ice
+TINTS=[('โหด',(1.3,0.7,0.65)),('พิษ',(0.75,1.2,0.6)),('นรก',(1.3,0.6,0.5)),('น้ำแข็ง',(0.75,0.95,1.3))]
 def model(n):
     for mdl,keys in MODELS:
         for k in keys:
@@ -45,7 +57,9 @@ for code in range(1,11):
         scale=BASE[mdl]*(1+0.05*rank)*(1.5 if z['elite'] else 1)
         power=z['zs']*100+z['lv']
         count=1 if z['elite'] else max(4,min(7,round(z['n']/4)))
-        rows.append('Z("%s", "%s", %d, %.0ff, %.0ff, %d, %.2ff%s)'%(nm,mdl,power,x,y,count,scale,', elite: true' if z['elite'] else ''))
+        tint=next((t for k,t in TINTS if k in z['name']),None)
+        extra=(', tint: new Color(%.2ff, %.2ff, %.2ff)'%tint if tint else '')+(', elite: true' if z['elite'] else '')
+        rows.append('Z("%s", "%s", %d, %.0ff, %.0ff, %d, %.2ff%s)'%(nm,mdl,power,x,y,count,scale,extra))
     req=min(z['zs']*100+z['lv'] for z in normals)
     out.append('// map %s\n%d\n'%(c,req)+',\n'.join(rows))
 print('\n\n'.join(out))
