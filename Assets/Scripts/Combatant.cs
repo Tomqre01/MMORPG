@@ -78,6 +78,14 @@ namespace MuProto
             actionLockUntil = Time.time + lockTime;
         }
 
+        // A named clip (Attack02, Skill01...), or the fallback when the model doesn't have it.
+        protected void PlayClip(string clip, ModelAnimator.Anim fallback, float lockTime)
+        {
+            if (anim == null) return;
+            if (!anim.PlayClip(clip, lockTime)) anim.Play(fallback, true, lockTime);
+            actionLockUntil = Time.time + lockTime;
+        }
+
         protected virtual void LateUpdate()
         {
             if (anim != null)

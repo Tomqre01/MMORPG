@@ -129,7 +129,7 @@ namespace MuProto
         {
             new[] { "idle", "stand" },
             new[] { "run", "walk", "move" },
-            new[] { "attack", "slash", "punch", "bite" },
+            new[] { "attack01", "attack", "slash", "punch", "bite" },
             new[] { "hit", "damage", "hurt" },
             new[] { "die", "death", "dead" },
         };
@@ -138,6 +138,7 @@ namespace MuProto
         const int Slots = 4; // clips that can be fading at once
 
         readonly AnimationClip[] clips = new AnimationClip[5];
+        readonly Dictionary<string, AnimationClip> named = new Dictionary<string, AnimationClip>(); // every clip by name (lower case)
         PlayableGraph graph;
         AnimationMixerPlayable mixer;
         // Mixer weights always add up to 1. If they don't, Unity blends the rig toward its default
@@ -169,6 +170,7 @@ namespace MuProto
                 return allowProcedural ? AttachProcedural(model) : null;
 
             var ma = model.AddComponent<ModelAnimator>();
+            foreach (var c in all) if (c != null) ma.named[c.name.ToLowerInvariant()] = c;
             for (int i = 0; i < Keywords.Length; i++) ma.clips[i] = Pick(all, Keywords[i]);
             if (ma.clips[0] == null && all.Length > 0) ma.clips[0] = all[0];
             for (int i = 1; i < ma.clips.Length; i++)
@@ -221,6 +223,21 @@ namespace MuProto
             }
             var clip = clips[(int)a];
             if (clip == null) return;
+            StartClip(clip, a, fitInto);
+        }
+
+        public bool HasClip(string name) => !procedural && named.ContainsKey(name.ToLowerInvariant());
+
+        // A one-shot clip by name (combo steps, skills), played like an attack. False if the model has none.
+        public bool PlayClip(string name, float fitInto = 0f)
+        {
+            if (procedural || !graph.IsValid() || !named.TryGetValue(name.ToLowerInvariant(), out var clip)) return false;
+            StartClip(clip, Anim.Attack, fitInto);
+            return true;
+        }
+
+        void StartClip(AnimationClip clip, Anim a, float fitInto)
+        {
 
             // Use a free slot; if every slot is still fading, reuse the faintest one and hand its
             // weight to the clip playing now so nothing ever drops out of the blend.

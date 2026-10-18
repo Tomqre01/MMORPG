@@ -157,10 +157,30 @@ namespace MuProto
         void OnEnable() => All.Add(this);
         void OnDisable() => All.Remove(this);
 
+        Vector3 knock; // knock-back velocity, fades out fast
+
+        // Pushed away from `from` by about `dist` metres (bosses and gates stand firm).
+        public void Knock(Vector3 from, float dist)
+        {
+            if (Stationary || IsBoss || IsWorldBoss || IsDead) return;
+            Vector3 d = transform.position - from;
+            d.y = 0;
+            if (d.sqrMagnitude < 0.0001f) return;
+            knock = d.normalized * dist * 12f;
+        }
+
         void Update()
         {
             if (IsDead || Stationary) return;
             float dt = Time.deltaTime;
+            if (knock.sqrMagnitude > 0.01f)
+            {
+                Vector3 p = transform.position + knock * dt;
+                p.x = Mathf.Clamp(p.x, Bounds.xMin, Bounds.xMax);
+                p.z = Mathf.Clamp(p.z, Bounds.yMin, Bounds.yMax);
+                transform.position = p;
+                knock *= Mathf.Exp(-12f * dt);
+            }
             attackTimer -= dt;
 
             var player = Player.Instance;

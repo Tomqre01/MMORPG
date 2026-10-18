@@ -7,7 +7,7 @@ Original designs in the classic MU archetypes (not copies of any game's art):
   Elf         - light green leather, white skirt, long blond hair, circlet, bow and quiver
 
 One shared humanoid rig, each part skinned rigidly to one bone. Clips (30 fps):
-  Idle, Run, Attack01 (basic attack), Attack02 (skill), GetHit, Die
+  Idle, Run, Attack01-03 (basic combo), Skill01 (spin / big cast), Skill02 (leap), GetHit, Die
 
 Each FBX carries every piece of gear (see the "gear" section): Unity shows what is equipped.
 
@@ -231,7 +231,19 @@ def limb(B, a, b, r1, r2, mat, bone, seg=10):
 
 BONES = ["Hips", "Spine", "Chest", "Neck", "Head",
          "UpperArm.L", "ForeArm.L", "Hand.L", "UpperArm.R", "ForeArm.R", "Hand.R",
-         "Thigh.L", "Shin.L", "Foot.L", "Thigh.R", "Shin.R", "Foot.R", "Cape", "Weapon"]
+         "Thigh.L", "Shin.L", "Foot.L", "Thigh.R", "Shin.R", "Foot.R", "Cape", "Weapon", "TrailBase", "TrailTip"]
+
+# Where the weapon's slash trail runs (Unity's WeaponTrail draws between these two bones).
+def trail_points(cls, J):
+    if cls == "DarkKnight":
+        g = Vector(J["Hand.R"][0]) + Vector((0, -0.02, -0.06))
+        d = Vector((0, -0.55, -0.83)).normalized()
+        return g + d * 0.3, g + d * 1.08, d
+    if cls == "DarkWizard":
+        g = Vector(J["Hand.R"][0]) + Vector((0, -0.04, -0.06))
+        return g + Vector((0, -0.03, 0.62)), g + Vector((0, -0.04, 1.08)), Vector((0, 0, 1))
+    g = Vector(J["Hand.L"][0]) + Vector((0, -0.03, -0.06))
+    return g + Vector((0, -0.1, -0.35)), g + Vector((0, -0.1, 0.35)), Vector((0, 0, 1))
 
 def skeleton(weapon_side):
     J = {"Hips": ((0, 0, 0.95), (0, 0, 1.08)),
@@ -289,6 +301,11 @@ def arm(side, fwd=0.0, out=0.0, elbow=0.0, fold=0.0):
     return {"UpperArm." + side: {"r": q(Y, -s * out) @ q(X, -fwd)},
             "ForeArm." + side: {"r": q(X, -elbow) @ q(Y, s * fold)}}
 
+def wrist(side, deg):
+    """Turn the hand (and what it holds) about the shoulder axis: negative undoes an arm raise,
+    so a staff stays upright while the arm lifts it."""
+    return {"Hand." + side: {"r": q(X, -deg)}}
+
 def leg(side, fwd=0.0, knee=0.0):
     return {"Thigh." + side: {"r": q(X, -fwd)}, "Shin." + side: {"r": q(X, knee)}}
 
@@ -325,47 +342,103 @@ def run_cycle(hold):
     return k
 
 def actions_for(cls):
+    """Idle, Run, a three-hit combo (Attack01-03), two skills (Skill01 spin, Skill02 leap), GetHit, Die."""
     if cls == "DarkKnight":
         held = lambda ph: arm("R", 15, 10, 12)
         idle0 = merge(torso(), arm("L", 5, 10, 15), held(0), leg("L", 3), leg("R", -3), cape(-3))
         idle1 = merge(torso(lean=3, bob=-0.012), arm("L", 6, 12, 18), arm("R", 17, 10, 15), leg("L", 3), leg("R", -3), cape(-6))
-        atk = {0: idle0,
-               6: merge(torso(lean=-6, twist=25), arm("R", 165, 15, 25), arm("L", 20, 20, 30), leg("L", 15, 10), leg("R", -10, 10), cape(-10)),
-               11: merge(torso(lean=18, twist=-28, bob=-0.06), arm("R", 40, 5, 0), arm("L", -10, 25, 20), leg("L", 30, 25), leg("R", -20, 15), cape(-20)),
-               16: merge(torso(lean=14, twist=-20, bob=-0.05), arm("R", 30, 8, 5), arm("L", -5, 20, 20), leg("L", 28, 25), leg("R", -18, 15), cape(-12)),
-               24: idle0}
-        skill = {0: idle0}
-        for i, f in enumerate((5, 10, 15, 20)):
-            skill[f] = merge(torso(hips_yaw=90 * (i + 1), bob=0.03), arm("R", 80, 75, 5), arm("L", 0, 80, 10),
-                             leg("L", 10, 15), leg("R", -10, 15), cape(-45))
-        skill[26] = merge(torso(lean=10, bob=-0.05), arm("R", 50, 30, 10), arm("L", 0, 40, 10), leg("L", 20, 30), leg("R", -15, 20), cape(-15))
-        skill[32] = idle0
+        stance = merge(leg("L", 18, 14), leg("R", -14, 12))
+        # 1: rising diagonal cut from high right down to low left
+        a1 = {0: idle0,
+              5: merge(torso(lean=-6, twist=38), arm("R", 160, 30, 35), arm("L", 25, 25, 35), stance, cape(-10)),
+              9: merge(torso(lean=10, twist=0, bob=-0.03), arm("R", 95, 12, 5), arm("L", 10, 25, 25), stance, cape(-18)),
+              12: merge(torso(lean=18, twist=-38, bob=-0.06), arm("R", 35, -5, 0), arm("L", -10, 30, 20), leg("L", 32, 26), leg("R", -22, 16), cape(-22)),
+              18: merge(torso(lean=14, twist=-30, bob=-0.05), arm("R", 30, 0, 5), arm("L", -5, 25, 20), leg("L", 28, 24), leg("R", -18, 15), cape(-14)),
+              24: idle0}
+        # 2: backhand sweep, flat and wide, left to right
+        a2 = {0: idle0,
+              4: merge(torso(lean=4, twist=-45), arm("R", 70, -10, 70, 45), arm("L", 20, 20, 30), stance, cape(-12)),
+              8: merge(torso(lean=8, twist=0, bob=-0.03), arm("R", 85, 70, 5), arm("L", 0, 35, 20), stance, cape(-20)),
+              11: merge(torso(lean=10, twist=45, bob=-0.05), arm("R", 30, 88, 0), arm("L", -10, 40, 25), leg("L", 30, 24), leg("R", -20, 16), cape(-24)),
+              16: merge(torso(lean=8, twist=38, bob=-0.04), arm("R", 25, 80, 5), arm("L", -5, 35, 25), leg("L", 26, 22), leg("R", -18, 15), cape(-14)),
+              22: idle0}
+        # 3: jump and two-handed overhead slam
+        a3 = {0: idle0,
+              6: merge(torso(lean=-12, bob=-0.1), arm("R", 175, 15, 45), arm("L", 165, 15, 50), leg("L", 30, 60), leg("R", -10, 55), cape(-8)),
+              11: merge(torso(lean=-16, bob=0.22, head=-8), arm("R", 185, 10, 20), arm("L", 180, 10, 25), leg("L", 40, 70), leg("R", 10, 80), cape(10)),
+              15: merge(torso(lean=34, bob=-0.14), arm("R", 70, 5, 0), arm("L", 62, 10, 5), leg("L", 45, 50), leg("R", -30, 30), cape(-35)),
+              22: merge(torso(lean=30, bob=-0.13), arm("R", 62, 5, 0), arm("L", 55, 10, 5), leg("L", 45, 50), leg("R", -30, 30), cape(-20)),
+              30: idle0}
+        # skill 1: whirlwind, two turns with the blade held out flat
+        s1 = {0: idle0, 3: merge(torso(twist=40, bob=-0.04), arm("R", 70, 75, 10), arm("L", 0, 70, 10), stance, cape(-20))}
+        for i, f in enumerate((5, 7, 9, 11, 13, 15, 17, 19)):
+            s1[f] = merge(torso(hips_yaw=90 * (i + 1), bob=0.02 * (i % 2)), arm("R", 85, 80, 5), arm("L", 0, 80, 10),
+                          leg("L", 12, 18), leg("R", -12, 18), cape(-50))
+        s1[24] = merge(torso(lean=12, twist=-20, bob=-0.06), arm("R", 50, 60, 5), arm("L", 0, 50, 10), leg("L", 25, 30), leg("R", -18, 20), cape(-18))
+        s1[30] = idle0
+        # skill 2: crouch, leap, and drive the blade into the ground
+        s2 = {0: idle0,
+              6: merge(torso(lean=14, bob=-0.16), arm("R", -35, 20, 20), arm("L", -30, 20, 20), leg("L", 50, 85), leg("R", 20, 85), cape(-10)),
+              12: merge(torso(lean=-14, bob=0.42, head=-10), arm("R", 190, 15, 15), arm("L", 185, 15, 20), leg("L", 50, 90), leg("R", 30, 100), cape(25)),
+              17: merge(torso(lean=40, bob=-0.18), arm("R", 50, 0, 0), arm("L", 45, 5, 0), leg("L", 55, 60), leg("R", -35, 40), cape(-40)),
+              26: merge(torso(lean=36, bob=-0.17), arm("R", 45, 0, 0), arm("L", 40, 5, 0), leg("L", 55, 60), leg("R", -35, 40), cape(-20)),
+              34: idle0}
         hold = lambda ph: arm("R", 20 * (1 if ph in (2, 3) else -0.3), 12, 15)
     elif cls == "DarkWizard":
         held = lambda ph: arm("R", 8, 15, 18)
         idle0 = merge(torso(), arm("L", 8, 12, 25), held(0), cape(-3))
         idle1 = merge(torso(lean=2, bob=-0.01), arm("L", 10, 14, 28), arm("R", 9, 15, 20), cape(-6))
-        atk = {0: idle0,
-               7: merge(torso(lean=-5, twist=15), arm("R", 120, 20, 40), arm("L", 40, 25, 30), cape(-8)),
-               13: merge(torso(lean=14, twist=-12, bob=-0.03), arm("R", 85, 10, 0), arm("L", 70, 10, 10), leg("L", 20, 10), cape(-18)),
-               18: merge(torso(lean=10, twist=-8), arm("R", 80, 10, 5), arm("L", 60, 12, 10), leg("L", 15, 10), cape(-12)),
-               26: idle0}
-        skill = {0: idle0,
-                 10: merge(torso(lean=-12, head=-15, bob=0.04), arm("R", 170, 30, 10), arm("L", 170, 30, 10), cape(-15)),
-                 16: merge(torso(lean=-12, head=-15, bob=0.06), arm("R", 175, 40, 5), arm("L", 175, 40, 5), cape(-20)),
-                 22: merge(torso(lean=22, bob=-0.08), arm("R", 55, 35, 0), arm("L", 55, 35, 0), leg("L", 20, 30), leg("R", -10, 25), cape(-30)),
-                 32: idle0}
+        # 1: staff flick
+        a1 = {0: idle0,
+              7: merge(torso(lean=-5, twist=15), arm("R", 120, 20, 40), wrist("R", -100), arm("L", 40, 25, 30), cape(-8)),
+              13: merge(torso(lean=14, twist=-12, bob=-0.03), arm("R", 85, 10, 0), wrist("R", -170), arm("L", 70, 10, 10), leg("L", 20, 10), cape(-18)),
+              18: merge(torso(lean=10, twist=-8), arm("R", 80, 10, 5), wrist("R", -160), arm("L", 60, 12, 10), leg("L", 15, 10), cape(-12)),
+              26: idle0}
+        # 2: open-hand push with the left
+        a2 = {0: idle0,
+              6: merge(torso(lean=-4, twist=30), arm("L", 40, 35, 85), arm("R", 20, 20, 25), leg("L", 10, 5), cape(-6)),
+              11: merge(torso(lean=12, twist=-20, bob=-0.03), arm("L", 92, 5, 0), arm("R", 10, 25, 25), leg("L", 24, 12), leg("R", -12, 8), cape(-20)),
+              16: merge(torso(lean=10, twist=-16), arm("L", 88, 8, 5), arm("R", 10, 25, 25), leg("L", 22, 12), leg("R", -10, 8), cape(-12)),
+              24: idle0}
+        # 3: raise the staff high and strike the ground
+        a3 = {0: idle0,
+              8: merge(torso(lean=-12, bob=0.05, head=-10), arm("R", 170, 20, 10), wrist("R", -175), arm("L", 150, 25, 20), cape(-6)),
+              14: merge(torso(lean=26, bob=-0.1), arm("R", 60, 15, 0), arm("L", 50, 20, 10), leg("L", 30, 30), leg("R", -20, 20), cape(-30)),
+              21: merge(torso(lean=22, bob=-0.09), arm("R", 55, 15, 0), arm("L", 45, 20, 10), leg("L", 30, 30), leg("R", -20, 20), cape(-18)),
+              30: idle0}
+        # skill 1: both hands to the sky
+        s1 = {0: idle0,
+              10: merge(torso(lean=-12, head=-15, bob=0.04), arm("R", 170, 30, 10), wrist("R", -175), arm("L", 170, 30, 10), cape(-15)),
+              16: merge(torso(lean=-12, head=-15, bob=0.06), arm("R", 175, 40, 5), wrist("R", -178), arm("L", 175, 40, 5), cape(-20)),
+              22: merge(torso(lean=22, bob=-0.08), arm("R", 55, 35, 0), wrist("R", -140), arm("L", 55, 35, 0), leg("L", 20, 30), leg("R", -10, 25), cape(-30)),
+              32: idle0}
+        # skill 2: one turn with the staff swung out, then point
+        s2 = {0: idle0, 3: merge(torso(twist=30), arm("R", 80, 70, 5), arm("L", 20, 40, 20), cape(-15))}
+        for i, f in enumerate((6, 9, 12, 15)):
+            s2[f] = merge(torso(hips_yaw=90 * (i + 1), bob=0.03), arm("R", 85, 80, 0), arm("L", 0, 60, 10), cape(-45))
+        s2[21] = merge(torso(lean=14, bob=-0.04), arm("R", 95, 10, 0), wrist("R", -180), arm("L", 30, 30, 30), leg("L", 24, 12), cape(-20))
+        s2[32] = idle0
         hold = lambda ph: arm("R", 8, 15, 22)
     else:  # Elf: bow in the left hand
         held = lambda ph: arm("L", 15, 12, 25)
         idle0 = merge(torso(), held(0), arm("R", 5, 10, 20), leg("L", 2), leg("R", -2))
         idle1 = merge(torso(lean=2, bob=-0.01), arm("L", 17, 14, 27), arm("R", 6, 12, 22), leg("L", 2), leg("R", -2))
         draw = lambda pull, tw: merge(torso(twist=tw), arm("L", 90, 0, 0), arm("R", 88, -5, 0, pull * 1.3))
-        atk = {0: idle0, 5: merge(draw(20, 35), leg("L", 12, 5), leg("R", -12, 5)),
-               12: merge(draw(110, 40), leg("L", 12, 5), leg("R", -12, 5)),
-               15: merge(draw(25, 38), leg("L", 12, 5), leg("R", -12, 5)), 22: idle0}
-        skill = {0: idle0, 4: draw(110, 40), 7: draw(25, 38), 10: draw(110, 30), 13: draw(25, 30),
-                 16: draw(110, 45), 19: draw(25, 45), 26: idle0}
+        st = merge(leg("L", 12, 5), leg("R", -12, 5))
+        a1 = {0: idle0, 5: merge(draw(20, 35), st), 12: merge(draw(110, 40), st), 15: merge(draw(25, 38), st), 22: idle0}
+        a2 = {0: idle0, 4: merge(draw(30, 45), torso(lean=6, twist=45), st), 10: merge(draw(110, 50), torso(lean=6, twist=50), st),
+              13: merge(draw(20, 48), torso(lean=6, twist=48), st), 20: idle0}
+        a3 = {0: idle0, 4: merge(draw(110, 38), st), 7: merge(draw(25, 38), st), 12: merge(draw(110, 42), st),
+              15: merge(draw(20, 42), torso(lean=-6, twist=42), st), 26: idle0}
+        s1 = {0: idle0, 4: draw(110, 40), 7: draw(25, 38), 10: draw(110, 30), 13: draw(25, 30),
+              16: draw(110, 45), 19: draw(25, 45), 26: idle0}
+        # skill 2: hop back and shoot in the air
+        s2 = {0: idle0,
+              5: merge(torso(lean=12, bob=-0.12), arm("L", 40, 10, 20), arm("R", 20, 10, 30), leg("L", 45, 70), leg("R", 25, 70)),
+              11: merge(draw(110, 40), torso(lean=-14, bob=0.34, hips_t=(0, 0.25, 0)), leg("L", 30, 80), leg("R", 50, 90)),
+              15: merge(draw(20, 40), torso(lean=-12, bob=0.3, hips_t=(0, 0.3, 0)), leg("L", 30, 70), leg("R", 45, 80)),
+              21: merge(torso(lean=10, bob=-0.08), held(0), arm("R", 30, 10, 20), leg("L", 30, 40), leg("R", -10, 30)),
+              28: idle0}
         hold = lambda ph: arm("L", 25, 12, 25)
     hit = {0: idle0,
            4: merge(torso(lean=-18, head=-15, bob=-0.02), arm("L", 15, 30, 40), arm("R", 15, 30, 40), cape(-15)),
@@ -380,8 +453,11 @@ def actions_for(cls):
                      arm("L", -25, 75, 5), arm("R", -25, 75, 5), cape(25))}
     return {"Idle": (40, True, {0: idle0, 20: idle1}),
             "Run": (20, True, run_cycle(hold)),
-            "Attack01": (max(atk), False, atk),
-            "Attack02": (max(skill), False, skill),
+            "Attack01": (max(a1), False, a1),
+            "Attack02": (max(a2), False, a2),
+            "Attack03": (max(a3), False, a3),
+            "Skill01": (max(s1), False, s1),
+            "Skill02": (max(s2), False, s2),
             "GetHit": (14, False, hit),
             "Die": (45, False, die)}
 
@@ -877,6 +953,9 @@ def build_class(name, out_dir):
         M[key] = len(mats)
         mats.append(make_mat(prefix + "_" + key, srgb(*rgb), rough=rough, metal=metal, emit=emit, strength=2.0))
     J, P = skeleton(weapon_side)
+    base, tip, d = trail_points(name, J)
+    J["TrailBase"], P["TrailBase"] = (tuple(base), tuple(base + d * 0.05)), "Weapon"
+    J["TrailTip"], P["TrailTip"] = (tuple(tip), tuple(tip + d * 0.05)), "Weapon"
     B = Builder(BONES)
     make(B, J, M)
     for slot in GEAR_SLOTS:
