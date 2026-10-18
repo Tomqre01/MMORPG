@@ -10,6 +10,8 @@ namespace MuProto.EditorTools
     // Emulators such as MuMu Player are reached over adb TCP, which Unity does not do on its own,
     // so "Build And Run" says "No Android devices connected". This connects Unity's own adb to the
     // emulator when the project opens on the Android target, and from Tools > Android.
+    // It also runs "adb reverse" for the game server port, so the game inside the emulator can log in with
+    // Server 127.0.0.1 (the emulator's own 127.0.0.1 is forwarded to this PC's Nakama server).
     [InitializeOnLoad]
     static class MuMuConnect
     {
@@ -53,14 +55,17 @@ namespace MuProto.EditorTools
                 {
                     var log = new StringBuilder();
                     bool any = false;
+                    string serial = null;
                     foreach (int port in Ports)
                     {
                         string o = Run(adb, "connect 127.0.0.1:" + port, 6000).Trim();
                         bool ok = o.Contains("connected to") && !o.Contains("cannot");
                         any |= ok;
                         if (ok || verbose) log.AppendLine(o);
-                        if (ok) break; // one port per emulator, or it shows up several times under Run Device
+                        if (ok) { serial = "127.0.0.1:" + port; break; } // one port per emulator, or it shows up several times under Run Device
                     }
+                    if (serial != null)
+                        log.AppendLine(ReverseServerPort(adb, serial));
                     string devices = Run(adb, "devices", 10000).Trim();
                     if (any)
                         Debug.Log("[MuMu] Emulator connected. Pick it under Run Device (press Refresh), then Build And Run.\n" + log + devices);
@@ -70,6 +75,17 @@ namespace MuProto.EditorTools
                 }
                 finally { busy = false; }
             });
+        }
+
+        // Nakama's client port (Online.Port). The realtime socket uses the same port.
+        const int ServerPort = 7350;
+
+        static string ReverseServerPort(string adb, string serial)
+        {
+            string o = Run(adb, "-s " + serial + " reverse tcp:" + ServerPort + " tcp:" + ServerPort, 6000).Trim();
+            bool ok = !o.Contains("error") && !o.Contains("timed out");
+            return ok ? "Game server: emulator 127.0.0.1:" + ServerPort + " -> this PC (log in with Server 127.0.0.1)"
+                      : "Game server port forward failed: " + o;
         }
 
         static string FindAdb()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Nakama;
 using UnityEngine;
@@ -47,6 +48,9 @@ namespace MuProto
         void Awake()
         {
             Instance = this;
+            // Keep sending and receiving while the window is not focused (the editor next to an emulator,
+            // or a second game window); otherwise the other player freezes or never shows up.
+            Application.runInBackground = true;
             var go = HUD.NewCanvas("Nameplates");
             nameCanvas = go.GetComponent<Canvas>();
             nameCanvas.sortingOrder = -1; // under the HUD
@@ -67,6 +71,8 @@ namespace MuProto
                 socket.Closed += OnClosed;
                 await socket.ConnectAsync(Online.Session, true);
                 match = await socket.CreateMatchAsync(WorldName); // same name, same match for everyone
+                Debug.Log("[Online] Joined world match " + match.Id + " as " + Online.Session.Username +
+                          ", others here: " + match.Presences.Count());
                 foreach (var p in match.Presences) Debug.Log("[Online] Already here: " + p.Username);
                 last = null; // send right away
                 HUD.Message("Online world joined", 2f);
@@ -93,7 +99,7 @@ namespace MuProto
         {
             if (match == null || e.MatchId != match.Id) return;
             if (e.Leaves != null) foreach (var p in e.Leaves) Remove(p.SessionId);
-            if (e.Joins != null) foreach (var _ in e.Joins) { last = null; break; } // newcomer needs our state now
+            if (e.Joins != null) foreach (var p in e.Joins) { Debug.Log("[Online] Joined: " + p.Username); last = null; } // newcomer needs our state now
         }
 
         void OnState(IMatchState s)
@@ -106,6 +112,7 @@ namespace MuProto
             string id = s.UserPresence.SessionId;
             if (!remotes.TryGetValue(id, out var rp) || rp == null)
             {
+                Debug.Log("[Online] Player appeared: " + st.n + " Lv " + st.lv);
                 rp = RemotePlayer.Create(st, nameCanvas.transform);
                 remotes[id] = rp;
             }

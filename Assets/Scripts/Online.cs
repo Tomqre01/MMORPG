@@ -22,10 +22,11 @@ namespace MuProto
         public static ISession Session { get; private set; }
         public static bool IsOnline => Session != null;
 
-        // Editor: this PC. Phone or emulator: the PC's IPv4 address from ipconfig.
+        // Editor, and MuMu once Tools > Android > Connect MuMu Emulator has forwarded the port: 127.0.0.1.
+        // A real phone: the PC's IPv4 address from ipconfig.
         public static string Host
         {
-            get => PlayerPrefs.GetString(HostPref, Application.isEditor ? "127.0.0.1" : "192.168.1.2");
+            get => PlayerPrefs.GetString(HostPref, "127.0.0.1");
             set { PlayerPrefs.SetString(HostPref, value); PlayerPrefs.Save(); }
         }
 
