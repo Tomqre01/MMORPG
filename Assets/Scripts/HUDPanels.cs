@@ -6,12 +6,12 @@ using UnityEngine.UI;
 namespace MuProto
 {
     // The MU Origin windows: map teleport, merchant shop, talents, mounts, titles, events,
-    // achievements, ranking, gems, Chaos Machine and the social window. Plain placeholder UI for now.
+    // achievements, ranking, gems, Chaos Machine and the social window.
     public partial class HUD
     {
         MenuPanel mapPanel, shopPanel, talentPanel, mountPanel, titlePanel, eventsPanel, achievePanel, rankPanel, gemsPanel, chaosPanel;
         SocialPanel socialPanel;
-        Text chatMini, rideText;
+        Text chatMini;
         int gearSlot; // equipment slot picked in the Gems / Chaos windows
 
         void OpenExtra(string name)
@@ -25,7 +25,7 @@ namespace MuProto
                 case "Title": titlePanel.Show(); break;
                 case "Events": eventsPanel.Show(); break;
                 case "Achievements": achievePanel.Show(); break;
-                case "Ranking": rankPanel.Show(); break;
+                case "Ranking": rankPanel.Show(); Activities.Instance?.RefreshRanking(() => { if (rankPanel.IsOpen) rankPanel.Show(); }); break;
                 case "Gems": gemsPanel.Show(); break;
                 case "Chaos": chaosPanel.Show(); break;
                 case "Social": socialPanel.Show(); break;
@@ -34,20 +34,18 @@ namespace MuProto
 
         void BuildExtra(Transform root)
         {
-            var tr = new Vector2(1, 1);
-            var c = new Color(0.25f, 0.3f, 0.4f, 0.9f);
-            string[] names = { "Social", "Events", "Title", "Mount", "Talent", "Shop", "Map" };
-            for (int i = 0; i < names.Length; i++)
-            {
-                string n = names[i];
-                UIB.Button(root, n, tr, new Vector2(-20 - i * 160, -120), new Vector2(150, 80), c, () => Toggle(n), null, 26);
-            }
-            var ride = UIB.Button(root, "Ride", tr, new Vector2(-20 - names.Length * 160, -120), new Vector2(150, 80), new Color(0.45f, 0.35f, 0.2f, 0.9f),
-                () => Player.Instance.ToggleRide(), null, 26);
-            rideText = ride.GetComponentInChildren<Text>();
-
-            chatMini = UIB.Label(root, "", 22, Vector2.zero, new Vector2(20, 400), new Vector2(820, 130), TextAnchor.LowerLeft);
+            // Chat box above the joystick: the last few lines, tap to open the Social window.
+            var chat = UIB.Rect("Chat", root, Vector2.zero, new Vector2(16, 392), new Vector2(620, 150));
+            Skin.Sliced(chat, Skin.Inset, Color.white);
+            chat.gameObject.AddComponent<Button>().onClick.AddListener(() => Open("Social"));
+            var tag = UIB.Rect("Tag", chat, new Vector2(0, 1), new Vector2(10, -8), new Vector2(110, 34));
+            Skin.Sliced(tag, Skin.Button, new Color(0.55f, 0.2f, 0.12f)).raycastTarget = false;
+            var tagText = UIB.Label(tag, "World", 20, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(110, 34), TextAnchor.MiddleCenter);
+            tagText.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            tagText.color = Skin.Gold;
+            chatMini = UIB.Label(chat, "", 21, Vector2.zero, new Vector2(14, 8), new Vector2(592, 92), TextAnchor.LowerLeft);
             chatMini.horizontalOverflow = HorizontalWrapMode.Wrap;
+            chatMini.color = Skin.Cream;
 
             BuildMap(root);
             BuildShop(root);
@@ -62,24 +60,15 @@ namespace MuProto
             socialPanel = new SocialPanel(root);
         }
 
-        void Toggle(string name)
-        {
-            MenuPanel m = name == "Map" ? mapPanel : name == "Shop" ? shopPanel : name == "Talent" ? talentPanel : name == "Mount" ? mountPanel
-                        : name == "Title" ? titlePanel : name == "Events" ? eventsPanel : null;
-            if (m != null) m.Toggle();
-            else if (name == "Social") socialPanel.Toggle();
-        }
-
         void UpdateExtra(Player p)
         {
-            rideText.text = p.Riding ? "Dismount" : "Ride";
             var s = Social.Instance;
             if (s != null)
             {
-                var lines = s.Log.Skip(Mathf.Max(0, s.Log.Count - 4));
+                var lines = s.Log.Skip(Mathf.Max(0, s.Log.Count - 3));
                 chatMini.text = string.Join("\n", lines) + (s.InviteFrom != null ? "\n<color=#9dff8a>Party invite from " + s.InviteName + " (Social > Accept)</color>" : "");
             }
-            else chatMini.text = "";
+            else chatMini.text = "<color=#a89c86>Offline. Log in online to chat with other players.</color>";
         }
 
         // ---- Map ----
@@ -311,6 +300,7 @@ namespace MuProto
     public class SocialPanel
     {
         readonly RectTransform panel;
+        readonly GameObject root;
         readonly Text log, info, result;
         readonly InputField field;
         readonly List<(Text text, System.Func<string> label)> buttons = new List<(Text, System.Func<string>)>();
@@ -319,17 +309,18 @@ namespace MuProto
 
         public SocialPanel(Transform canvas)
         {
-            var center = new Vector2(0.5f, 0.5f);
             var tl = new Vector2(0, 1);
-            panel = UIB.Rect("Social", canvas, center, Vector2.zero, new Vector2(1600, 900));
-            UIB.Image(panel, new Color(0.08f, 0.08f, 0.12f, 0.96f));
-            UIB.Label(panel, "Social", 44, tl, new Vector2(30, -20), new Vector2(600, 60));
-            log = UIB.Label(panel, "", 22, tl, new Vector2(30, -90), new Vector2(860, 610), TextAnchor.LowerLeft);
+            (root, panel) = Skin.Window(canvas, "Social", "Social", new Vector2(1600, 920), () => root.SetActive(false));
+            Skin.Sliced(UIB.Rect("LogBox", panel, tl, new Vector2(20, -84), new Vector2(880, 626)), Skin.Inset, Color.white).raycastTarget = false;
+            Skin.Sliced(UIB.Rect("InfoBox", panel, tl, new Vector2(910, -84), new Vector2(670, 262)), Skin.Inset, Color.white).raycastTarget = false;
+            log = UIB.Label(panel, "", 22, tl, new Vector2(34, -94), new Vector2(852, 606), TextAnchor.LowerLeft);
             log.horizontalOverflow = HorizontalWrapMode.Wrap;
-            field = UIB.Field(panel, "", tl, new Vector2(30, -715), new Vector2(860, 70), 28, 120);
+            field = UIB.Field(panel, "", tl, new Vector2(20, -722), new Vector2(880, 70), 28, 120);
             result = UIB.Label(panel, "", 24, new Vector2(0, 0), new Vector2(30, 30), new Vector2(860, 70));
+            result.color = Skin.Gold;
             result.horizontalOverflow = HorizontalWrapMode.Wrap;
-            info = UIB.Label(panel, "", 22, tl, new Vector2(920, -90), new Vector2(650, 250), TextAnchor.UpperLeft);
+            info = UIB.Label(panel, "", 22, tl, new Vector2(926, -96), new Vector2(640, 240), TextAnchor.UpperLeft);
+            info.color = Skin.Cream;
             info.horizontalOverflow = HorizontalWrapMode.Wrap;
 
             Add(() => "Send (" + channel + ")", Send, new Color(0.2f, 0.45f, 0.25f));
@@ -349,8 +340,7 @@ namespace MuProto
             Add(() => "Add friend nearby", () => { if (S() == null) return Offline; S().AddFriend(Nearby(), Done); return "..."; }, new Color(0.25f, 0.35f, 0.5f));
             Add(() => "Accept friends", () => { if (S() == null) return Offline; S().AcceptFriends(Done); return "..."; }, new Color(0.25f, 0.35f, 0.5f));
 
-            UIB.Button(panel, "Close", new Vector2(1, 1), new Vector2(-20, -20), new Vector2(200, 70), new Color(0.3f, 0.3f, 0.35f), Toggle);
-            panel.gameObject.SetActive(false);
+            root.SetActive(false);
         }
 
         const string Offline = "Social features need the server: log in online";
@@ -409,14 +399,14 @@ namespace MuProto
 
         public void Toggle()
         {
-            if (panel.gameObject.activeSelf) panel.gameObject.SetActive(false);
+            if (root.activeSelf) root.SetActive(false);
             else Show();
         }
 
         public void Show()
         {
-            panel.gameObject.SetActive(true);
-            panel.SetAsLastSibling();
+            root.SetActive(true);
+            root.transform.SetAsLastSibling();
             var s = S();
             if (s != null)
             {
@@ -429,7 +419,7 @@ namespace MuProto
 
         void Refresh()
         {
-            if (panel == null || !panel.gameObject.activeSelf) return;
+            if (root == null || !root.activeSelf) return;
             var s = S();
             var p = Player.Instance;
             string me = p != null && !string.IsNullOrEmpty(p.Data.charName) ? p.Data.charName : "(no name set)";

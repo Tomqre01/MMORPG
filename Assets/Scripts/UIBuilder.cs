@@ -81,31 +81,56 @@ namespace MuProto
         public static Button Button(Transform parent, string label, Vector2 anchor, Vector2 pos, Vector2 size, Color bg, UnityAction onClick, Sprite sprite = null, int fontSize = 30, Vector2? pivot = null)
         {
             var rt = Rect(label + " Button", parent, anchor, pos, size, pivot);
-            var img = Image(rt, bg, sprite);
+            Image img;
+            if (sprite == null)
+            {
+                img = Skin.Sliced(rt, Skin.Button, Brighten(bg));
+                Skin.Child(rt, "Edge", Skin.ButtonEdge, Color.white, true);
+            }
+            else if (sprite == Circle)
+            {
+                img = Image(rt, Brighten(bg), Skin.Orb);
+                Skin.Child(rt, "Ring", Skin.Ring, Color.white);
+            }
+            else img = Image(rt, bg, sprite);
             var b = rt.gameObject.AddComponent<Button>();
             b.targetGraphic = img;
+            var colors = b.colors;
+            colors.pressedColor = new Color(0.7f, 0.7f, 0.7f);
+            colors.highlightedColor = Color.white;
+            b.colors = colors;
             b.onClick.AddListener(onClick);
             Text(Stretch(Rect("Text", rt, Vector2.zero, Vector2.zero, Vector2.zero)), label, fontSize, Color.white, TextAnchor.MiddleCenter);
             return b;
         }
 
+        // Dark muted colours read better a little lighter on the glossy sprites.
+        static Color Brighten(Color c) => new Color(Mathf.Min(1, c.r * 1.25f + 0.04f), Mathf.Min(1, c.g * 1.25f + 0.04f), Mathf.Min(1, c.b * 1.25f + 0.04f), Mathf.Max(c.a, 0.9f));
+
         // A horizontal bar; returns the fill so callers can set anchorMax.x to the ratio.
-        public static RectTransform Bar(Transform parent, Vector2 anchor, Vector2 pos, Vector2 size, Color fill)
+        public static RectTransform Bar(Transform parent, Vector2 anchor, Vector2 pos, Vector2 size, Color fill, Vector2? pivot = null)
         {
-            var bg = Rect("Bar", parent, anchor, pos, size);
-            Image(bg, new Color(0, 0, 0, 0.6f));
+            var bg = Rect("Bar", parent, anchor, pos, size, pivot);
+            Skin.Sliced(bg, Skin.BarBack, Color.white).raycastTarget = false;
             var f = Stretch(Rect("Fill", bg, Vector2.zero, Vector2.zero, Vector2.zero));
-            Image(f, fill).raycastTarget = false;
+            f.offsetMin = new Vector2(2, 2);
+            f.offsetMax = new Vector2(-2, -2);
+            Skin.Sliced(f, Skin.BarFill, fill).raycastTarget = false;
             return f;
         }
 
-        public static void SetBar(RectTransform fill, float ratio) => fill.anchorMax = new Vector2(Mathf.Clamp01(ratio), 1);
+        public static void SetBar(RectTransform fill, float ratio)
+        {
+            ratio = Mathf.Clamp01(ratio);
+            fill.anchorMax = new Vector2(ratio, 1);
+            fill.gameObject.SetActive(ratio > 0.001f);
+        }
 
         // A single-line text box (chat, names).
         public static InputField Field(Transform parent, string value, Vector2 anchor, Vector2 pos, Vector2 size, int fontSize = 30, int limit = 64)
         {
             var rt = Rect("Field", parent, anchor, pos, size);
-            var bg = Image(rt, new Color(1, 1, 1, 0.12f));
+            var bg = Skin.Sliced(rt, Skin.Inset, Color.white);
             var textRt = Stretch(Rect("Text", rt, Vector2.zero, Vector2.zero, Vector2.zero));
             textRt.offsetMin = new Vector2(14, 0);
             textRt.offsetMax = new Vector2(-14, 0);

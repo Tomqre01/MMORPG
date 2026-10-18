@@ -111,3 +111,22 @@ Auto-Quest วาร์ปไปแผนที่ของเควสต์ใ
 - มอนในสนามแต่ละเครื่องแยกกัน ยกเว้น World Boss ที่แบ่ง HP กัน
 - Ranking, Arena และค่าใน Ranking มาจากข้อมูลที่แต่ละเครื่องส่งเอง
 - ตัวเลขสมดุลยังเป็นค่าเริ่มต้น ปรับได้ตามหัวข้อ "ปรับสมดุลเกมได้ที่ไหน" ใน README
+
+## UI (MU Origin layout)
+
+All UI is still built in code, now with a shared skin (`UISkin.cs`): dark lacquered panels with gold trim,
+glossy orbs with gold rings, gradient bars and red title plates. The sprites are drawn into small
+textures at start-up and 9-sliced, so there are still no art files to manage.
+
+- **Top left:** class portrait (tap = Character), level badge, name, CP, HP bar, buff line. A red dot means free stat points.
+- **Top centre:** Zen, Diamonds, Bless and Soul; the target's name and HP bar while you fight; dungeon status.
+- **Top right:** round minimap centred on you (monsters red, bosses purple, players blue, zones coloured by danger)
+  with the map name and coordinates (tap = Teleport); two rows of activity icons that fold away with `>`.
+- **Left:** Quest / Team tracker (tap = auto quest or Social), world boss timer, chat box (tap = Social).
+- **Bottom:** joystick, full-width EXP bar, CP change pop-up.
+- **Bottom right:** Attack, three skills in an arc with cooldown numbers, potion, AUTO, Auto Potion, Peace/PK, Ride,
+  BAG, and MENU, which opens a grid with every window.
+- **Windows:** dimmed background (tap outside to close), title plate and a red X.
+
+The canvas keeps a 1080 px height and widens on long phones. In the editor, **Tools > UI Shots** (in Play mode)
+saves screenshots of the HUD and the main windows to `Assets/UIShots` (ignored by git).
