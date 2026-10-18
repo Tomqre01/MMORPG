@@ -122,16 +122,106 @@ namespace MuProto
         }
     }
 
+    // Third-person follow camera, close behind the player and looking down at a slant, like most
+    // mobile MMOs. Zoom with the mouse wheel or a two-finger pinch (outside the HUD): closer also
+    // means a lower angle, further a more top-down one.
     public class CameraFollow : MonoBehaviour
     {
         public Transform Target;
-        public Vector3 Offset = new Vector3(0, 13f, -10f);
+        public float Zoom = 0.35f;                 // 0 = closest, 1 = furthest
+        const float NearDist = 6f, FarDist = 17f;  // distance from the look point
+        const float NearPitch = 30f, FarPitch = 55f;
+        const float LookHeight = 1.3f;             // look at the chest, not the feet
+        float pinchStart = -1f, zoomAtPinch;
+
+        public Vector3 Offset
+        {
+            get
+            {
+                float pitch = Mathf.Lerp(NearPitch, FarPitch, Zoom) * Mathf.Deg2Rad;
+                float dist = Mathf.Lerp(NearDist, FarDist, Zoom);
+                return new Vector3(0, Mathf.Sin(pitch) * dist + LookHeight, -Mathf.Cos(pitch) * dist);
+            }
+        }
+
+        public void SnapToTarget()
+        {
+            if (Target == null) return;
+            transform.position = Target.position + Offset;
+            transform.rotation = Quaternion.LookRotation(Target.position + Vector3.up * LookHeight - transform.position);
+        }
 
         void LateUpdate()
         {
             if (Target == null) return;
-            transform.position = Vector3.Lerp(transform.position, Target.position + Offset, 8f * Time.deltaTime);
-            transform.rotation = Quaternion.LookRotation(-Offset);
+            ReadZoom();
+            Vector3 want = Target.position + Offset;
+            // Teleports and map changes jump straight there instead of flying across the world.
+            if ((want - transform.position).sqrMagnitude > 30f * 30f) transform.position = want;
+            else transform.position = Vector3.Lerp(transform.position, want, 10f * Time.deltaTime);
+            Vector3 look = Target.position + Vector3.up * LookHeight - transform.position;
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(look), 12f * Time.deltaTime);
+        }
+
+        void ReadZoom()
+        {
+            float wheel = 0f;
+            Vector2 a = Vector2.zero, b = Vector2.zero;
+            int touches = 0;
+#if ENABLE_INPUT_SYSTEM
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse != null) wheel = mouse.scroll.ReadValue().y / 120f;
+            var ts = UnityEngine.InputSystem.Touchscreen.current;
+            if (ts != null)
+            {
+                foreach (var t in ts.touches)
+                {
+                    if (!t.press.isPressed) continue;
+                    if (touches == 0) a = t.position.ReadValue(); else if (touches == 1) b = t.position.ReadValue();
+                    touches++;
+                }
+            }
+#else
+            wheel = Input.mouseScrollDelta.y;
+            touches = Input.touchCount;
+            if (touches >= 2) { a = Input.GetTouch(0).position; b = Input.GetTouch(1).position; }
+#endif
+            if (Mathf.Abs(wheel) > 0.01f && !OverUI(Pointer())) Zoom = Mathf.Clamp01(Zoom - wheel * 0.08f);
+
+            if (touches == 2)
+            {
+                float d = (a - b).magnitude;
+                if (pinchStart < 0f)
+                {
+                    // Only a pinch on the world: not the joystick plus a skill button.
+                    if (OverUI(a) || OverUI(b)) return;
+                    pinchStart = d;
+                    zoomAtPinch = Zoom;
+                }
+                else Zoom = Mathf.Clamp01(zoomAtPinch + (pinchStart - d) / Mathf.Max(200f, Screen.height * 0.6f));
+            }
+            else pinchStart = -1f;
+        }
+
+        static Vector2 Pointer()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            return mouse != null ? mouse.position.ReadValue() : Vector2.zero;
+#else
+            return Input.mousePosition;
+#endif
+        }
+
+        static readonly System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult> hits = new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();
+
+        static bool OverUI(Vector2 screen)
+        {
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            if (es == null) return false;
+            hits.Clear();
+            es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = screen }, hits);
+            return hits.Count > 0;
         }
     }
 
@@ -179,6 +269,13 @@ namespace MuProto
                 light.transform.rotation = Quaternion.Euler(50, -30, 0);
             }
 
+            // A soft haze hides the edge of the map now that the camera looks out at a slant.
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = new Color(0.72f, 0.8f, 0.86f);
+            RenderSettings.fogStartDistance = 32f;
+            RenderSettings.fogEndDistance = 75f;
+
             Maps.BuildAll();
             var player = Player.Create(Vector3.zero);
 
@@ -188,13 +285,18 @@ namespace MuProto
                 cam = new GameObject("Main Camera").AddComponent<Camera>();
                 cam.tag = "MainCamera";
             }
-            cam.gameObject.AddComponent<CameraFollow>().Target = player.transform;
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = RenderSettings.fogColor;
+            cam.fieldOfView = 50f;
+            cam.farClipPlane = 120f;
+            var follow = cam.gameObject.AddComponent<CameraFollow>();
+            follow.Target = player.transform;
 
             HUD.Create();
             int map = Mathf.Clamp(player.Data.mapId, 0, Maps.All.Length - 1);
             if (!Maps.CanEnter(player.Data, Maps.All[map], out _)) map = 0;
             Maps.Enter(player, map, true);
-            cam.transform.position = player.transform.position + new Vector3(0, 13f, -10f);
+            follow.SnapToTarget();
 
             WorldSync.Create();
             WorldBoss.Create();
