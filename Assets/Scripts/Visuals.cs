@@ -13,6 +13,7 @@ namespace MuProto
         Color baseColor;
         int tier = -1;
         readonly List<Material> mats = new List<Material>();
+        readonly Dictionary<Material, Color> baseEmission = new Dictionary<Material, Color>(); // eyes, orbs, gems keep their own glow
         Light glowLight;
         LineRenderer[] bolts;
         float boltTimer, boltShowUntil;
@@ -45,35 +46,58 @@ namespace MuProto
 
         public static int TierFor(int plus) => plus >= 13 ? 4 : plus >= 11 ? 3 : plus >= 9 ? 2 : plus >= 7 ? 1 : 0;
 
+        static readonly float[] Intensity = { 0f, 0.35f, 0.7f, 1.1f, 1.6f };
+
+        void Collect()
+        {
+            if (mats.Count > 0) return;
+            foreach (var r in GetComponentsInChildren<Renderer>(true))
+            {
+                if (r is LineRenderer || r is ParticleSystemRenderer) continue;
+                foreach (var m in r.materials) // per-object copies, so other players' looks stay separate
+                {
+                    if (m == null) continue;
+                    mats.Add(m);
+                    bool lit = m.IsKeywordEnabled("_EMISSION") && m.HasProperty("_EmissionColor");
+                    baseEmission[m] = lit ? m.GetColor("_EmissionColor") : Color.black;
+                }
+            }
+        }
+
+        // GearVisual repaints a gem when the gear changes: remember it as that material's own glow.
+        public void SetBaseEmission(Material m, Color c)
+        {
+            if (mats.Count == 0) return; // not collected yet: the colour is read when it is
+            baseEmission[m] = c;
+            if (!mats.Contains(m)) mats.Add(m);
+            ApplyGlow(m);
+        }
+
+        void ApplyGlow(Material m)
+        {
+            Color e = (baseEmission.TryGetValue(m, out var b) ? b : Color.black) + (tier > 0 ? glow * Intensity[tier] : Color.black);
+            if (e.maxColorComponent <= 0.001f)
+            {
+                m.DisableKeyword("_EMISSION");
+                m.SetColor("_EmissionColor", Color.black);
+            }
+            else
+            {
+                m.EnableKeyword("_EMISSION");
+                m.SetColor("_EmissionColor", e);
+            }
+        }
+
         public void SetLevel(int plus)
         {
             int t = TierFor(plus);
             if (t == tier) return;
             tier = t;
 
-            if (mats.Count == 0)
-                foreach (var r in GetComponentsInChildren<Renderer>())
-                {
-                    if (r is LineRenderer || r is ParticleSystemRenderer) continue;
-                    mats.AddRange(r.materials); // per-object copies, so other players' looks stay separate
-                }
-
+            Collect();
             glow = tier >= 4 ? new Color(1f, 0.8f, 0.3f) : Color.Lerp(baseColor, Color.white, 0.5f);
-            float[] intensity = { 0f, 0.35f, 0.7f, 1.1f, 1.6f };
             foreach (var m in mats)
-            {
-                if (m == null) continue;
-                if (tier == 0)
-                {
-                    m.DisableKeyword("_EMISSION");
-                    m.SetColor("_EmissionColor", Color.black);
-                }
-                else
-                {
-                    m.EnableKeyword("_EMISSION");
-                    m.SetColor("_EmissionColor", glow * intensity[tier]);
-                }
-            }
+                if (m != null) ApplyGlow(m);
 
             if (tier >= 1 && glowLight == null)
             {

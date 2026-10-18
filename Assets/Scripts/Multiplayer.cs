@@ -26,6 +26,7 @@ namespace MuProto
         public int tt = -1; // title index
         public int mt = -1; // mount index, -1 = on foot
         public string gn;  // guild name
+        public string eq;  // gear look: one tier digit per GearVisual.Shown slot, 0 = empty
         public float x, z, ry;
         public int a;      // 0 idle, 1 attack, 2 dead
     }
@@ -256,6 +257,7 @@ namespace MuProto
                 tt = p.Data.titleId,
                 mt = p.Riding ? p.Data.mountId : -1,
                 gn = Social.Instance != null ? Social.Instance.GuildName : "",
+                eq = GearVisual.Encode(GearVisual.TiersOf(p.Data)),
                 x = p.transform.position.x,
                 z = p.transform.position.z,
                 ry = p.transform.eulerAngles.y,
@@ -268,7 +270,7 @@ namespace MuProto
         }
 
         static bool SameAs(PlayerState a, PlayerState b) =>
-            a.c == b.c && a.lv == b.lv && a.rb == b.rb && a.w == b.w && a.pt == b.pt && a.g == b.g && a.h == b.h &&
+            a.c == b.c && a.eq == b.eq && a.lv == b.lv && a.rb == b.rb && a.w == b.w && a.pt == b.pt && a.g == b.g && a.h == b.h &&
             a.r == b.r && a.k == b.k && a.cp == b.cp && a.a == b.a && a.tt == b.tt && a.mt == b.mt && a.gn == b.gn &&
             Mathf.Abs(a.x - b.x) < 0.02f && Mathf.Abs(a.z - b.z) < 0.02f && Mathf.Abs(Mathf.DeltaAngle(a.ry, b.ry)) < 2f;
 
@@ -300,6 +302,7 @@ namespace MuProto
         ModelAnimator anim;
         RemotePet pet;
         Aura aura;
+        GearVisual gear;
         RectTransform plate, hpFill;
         Text plateText;
         PlayerState state;
@@ -346,7 +349,9 @@ namespace MuProto
                 if (body != null) Destroy(body.gameObject);
                 body = Player.MakeBody(transform, cls, out anim);
                 aura = Aura.Attach(body, cls.BodyColor);
+                gear = body.GetComponentInChildren<GearVisual>();
             }
+            if (gear != null) gear.Apply(GearVisual.Decode(st.eq));
             aura.SetLevel(st.g);
             if (rebuildWings || rebuildMount)
             {
